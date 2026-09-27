@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { DraftCard } from "@/components/draft-card";
 import { StatusFilter } from "@/components/status-filter";
-import { Button } from "@/components/ui/button";
-import type { Draft, DraftStatus } from "@/lib/types";
+import { EmptyState } from "@/components/empty-state";
+import { getDraftCardContext } from "@/lib/draft-card-context";
+import type { Draft, DraftStatus, Publication } from "@/lib/types";
 
 const VALID_STATUSES: DraftStatus[] = ["new", "ready", "published", "discarded"];
 
@@ -18,44 +19,30 @@ export default async function QueuePage({
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   let query = supabase
     .from("drafts")
-    .select("*")
+    .select("*, publications(*)")
     .order("created_at", { ascending: false });
 
   if (status) {
     query = query.eq("status", status);
+  } else {
+    // "All" still hides discarded drafts unless you ask for them.
+    query = query.neq("status", "discarded");
   }
 
   const { data, error } = await query;
-  const drafts = (data ?? []) as Draft[];
+  const drafts = (data ?? []) as (Draft & { publications: Publication[] })[];
+  const context = getDraftCardContext();
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            GMB Digital
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Review incoming news and publish to your stations.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {user?.email && (
-            <span className="text-sm text-muted-foreground">{user.email}</span>
-          )}
-          <form action="/auth/logout" method="post">
-            <Button variant="outline" type="submit">
-              Sign out
-            </Button>
-          </form>
-        </div>
-      </header>
+    <>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Queue</h1>
+        <p className="text-sm text-muted-foreground">
+          Review incoming news, pick an image and stations, then publish.
+        </p>
+      </div>
 
       <StatusFilter active={status ?? "all"} />
 
@@ -66,16 +53,23 @@ export default async function QueuePage({
       )}
 
       {!error && drafts.length === 0 && (
-        <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No drafts here yet.
-        </p>
+        <EmptyState
+          title={status ? `No ${status} drafts` : "The queue is empty"}
+          description="New stories from the newsletters land here automatically. You can also write one yourself."
+          action={{ href: "/new", label: "New post" }}
+        />
       )}
 
       <div className="flex flex-col gap-4">
         {drafts.map((draft) => (
-          <DraftCard key={draft.id} draft={draft} />
+          <DraftCard
+            key={draft.id}
+            draft={draft}
+            publications={draft.publications}
+            context={context}
+          />
         ))}
       </div>
-    </div>
+    </>
   );
 }
