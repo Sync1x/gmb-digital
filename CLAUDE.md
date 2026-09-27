@@ -7,8 +7,32 @@ Internal publishing dashboard for Green Mountain Broadcasters (six station WordP
 - Next.js (App Router, TypeScript, Tailwind) on Vercel
 - Supabase: Postgres for the drafts queue, Supabase Auth for login (email + password, small allowlist of users)
 - MainWP REST API (one API key from the MainWP dashboard) for posting to all six station sites — no per-site credentials
-- Confirm the exact MainWP endpoints for creating a post and setting a featured image before building Phase 2; if featured images aren't supported through MainWP, flag it rather than working around it
+- MainWP endpoints and request shapes are documented in `docs/mainwp-api.md`. The featured image is set in the create-post call itself (`post_featured_image` = a public image URL the child site downloads).
 - Make.com: pulls newsletter emails from Zoho, splits/titles them, POSTs drafts to this app; separate Make scenarios post to Facebook and are triggered by webhook
+- Brave Search API for image search; sharp for JPEG conversion; Supabase Storage (public bucket `featured`) for images
+- DeepSeek (optional) for title suggestions
+
+## Status
+
+Phases 1–3 are built. The MainWP live test is still pending: see "Results" in `docs/mainwp-api.md` and confirm the create-post response fields.
+
+## Where things live
+
+- `src/app/(app)/`: signed-in pages sharing the header/nav layout
+  - `page.tsx` is the queue: draft cards with a status filter
+  - `new/` is the manual composer (Phase 3)
+  - `history/` lists published posts
+  - `settings/` shows the MainWP connection, child site IDs and station mapping
+- `src/app/login`, `src/app/auth/logout`: auth. `src/proxy.ts` (Next 16's renamed middleware) guards everything except `/login` and `/api/intake`.
+- `src/app/api/intake`: Make.com → drafts (`x-intake-secret`). `src/app/api/images/upload` handles image uploads. It's a route handler because server actions cap bodies at 1 MB.
+- Server actions: `src/app/actions.ts` (drafts), `image-actions.ts`, `publish-actions.ts`, `ai-actions.ts`. They return `ActionResult` (`{ ok, data } | { ok, error }`) instead of throwing, because production Next hides thrown messages.
+- `src/lib/mainwp.ts`: MainWP client. `publish.ts` holds the per-station publish logic (WordPress first, then Facebook). `publish-mode.ts` covers PUBLISH_MODE and MAINWP_TEST_SITE_ID. `image-search.ts` is the swappable provider interface (Brave today). `images.ts` handles download, sharp and Storage. `ai.ts` covers DeepSeek plus the AI_ENABLED check.
+- `supabase/migrations/`: SQL run by hand in the Supabase SQL editor, in order:
+  - `0001` creates drafts
+  - `0002` creates the `featured` bucket
+  - `0003` creates publications
+- Publishing runs from the browser: one `publishStationAction` per station in sequence, then `finalizeDraftAction`, which marks the draft published when every station is complete. A station is complete when its WP post is confirmed and, in live mode, Facebook has fired. Retrying reuses an existing WP post, so only the webhook is re-fired.
+- `PUBLISH_MODE` defaults to `draft` (WP drafts, no Facebook). Only `PUBLISH_MODE=live` publishes for real.
 
 ## Build phases (do them in order, don't jump ahead)
 
@@ -19,7 +43,9 @@ Internal publishing dashboard for Green Mountain Broadcasters (six station WordP
 ## Rules
 
 - Secrets live only in `.env.local` and Vercel env vars. Never commit them. The repo may become public.
-- Station config (name, site URL, Make webhook env var name) lives in one file: `src/config/stations.ts`.
+- Station config (name, site URL, MainWP site ID, Make webhook env var name, optional WP categories) lives in one file: `src/config/stations.ts`.
+- While building or testing, never publish to a live station: keep `PUBLISH_MODE=draft` and set `MAINWP_TEST_SITE_ID` to one test site. Never print API keys in the terminal or logs.
+- Tailwind's `dark:` variant is bound to a `.dark` class that is never applied (see `globals.css`), so shadcn's `dark:` classes stay inert.
 - Every draft keeps its source (sender / email / manual) and status (`new` → `ready` → `published` / `discarded`).
 - Publishing must never fire the Facebook webhook until WordPress has returned a successful response for that site.
 - AI steps (splitting, titles, image queries) must be optional and switchable off, so the tool still works without AI.
