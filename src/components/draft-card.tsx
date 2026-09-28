@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { SendIcon, Trash2Icon } from "lucide-react";
 import { setDraftStatus, updateDraft } from "@/app/actions";
 import { getPublishProblems } from "@/lib/publications";
 import type { Draft, DraftCardContext, DraftStatus, Publication } from "@/lib/types";
@@ -41,6 +42,17 @@ const STATUS_VARIANT: Record<DraftStatus, "default" | "secondary" | "outline" | 
   published: "outline",
   discarded: "destructive",
 };
+
+const dateFormat = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function formatDate(iso: string) {
+  return dateFormat.format(new Date(iso));
+}
 
 export function DraftCard({
   draft,
@@ -92,86 +104,108 @@ export function DraftCard({
     return draft.id;
   }
 
+  const headingId = `draft-${draft.id}-title`;
+
   return (
-    <Card className="gap-5">
-      <CardHeader className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={draft.source_type === "newsletter" ? "secondary" : "outline"}>
-              {draft.source_type === "newsletter" ? "Newsletter" : "Manual"}
-              {draft.source_sender ? ` · ${draft.source_sender}` : ""}
-            </Badge>
-            <Badge variant={STATUS_VARIANT[draft.status]}>{STATUS_LABEL[draft.status]}</Badge>
-          </div>
-          <span className="shrink-0 text-sm text-muted-foreground">
-            {new Date(draft.created_at).toLocaleString()}
+    <Card role="article" className="gap-0 py-0" aria-labelledby={headingId}>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={STATUS_VARIANT[draft.status]}>{STATUS_LABEL[draft.status]}</Badge>
+          <span className="text-sm text-muted-foreground">
+            {draft.source_type === "newsletter" ? "Newsletter" : "Manual"}
+            {draft.source_sender ? ` · ${draft.source_sender}` : ""}
           </span>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Untitled"
-            disabled={isFinal}
-            aria-label="Title"
-            className="h-11 text-lg font-semibold"
-          />
-          {context.aiEnabled && !isFinal && (
-            <SuggestTitleButton body={body} currentTitle={title} onPick={setTitle} />
-          )}
-        </div>
+        <time
+          dateTime={draft.created_at}
+          className="text-sm text-muted-foreground tabular-nums"
+          suppressHydrationWarning
+        >
+          {formatDate(draft.created_at)}
+        </time>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-5">
-        <Textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          disabled={isFinal}
-          aria-label="Story text"
-          rows={8}
-          className="whitespace-pre-wrap"
-        />
+      <CardContent className="grid gap-6 py-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <h2 id={headingId} className="sr-only">
+            {title.trim() || "Untitled draft"}
+          </h2>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${draft.id}-title`}>Headline</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id={`${draft.id}-title`}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Untitled"
+                disabled={isFinal}
+                className="h-10 text-base font-medium"
+              />
+              {context.aiEnabled && !isFinal && (
+                <SuggestTitleButton body={body} currentTitle={title} onPick={setTitle} />
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${draft.id}-body`}>Story</Label>
+            <Textarea
+              id={`${draft.id}-body`}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              disabled={isFinal}
+              rows={9}
+              className="min-h-48 leading-relaxed whitespace-pre-wrap"
+            />
+          </div>
+        </div>
 
-        <div className="flex flex-col gap-2">
-          <Label className="text-sm font-medium">Featured image</Label>
-          <ImagePicker
-            draftId={draft.id}
-            imageUrl={imageUrl}
-            onChange={setImageUrl}
-            defaultQuery={title}
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Featured image</span>
+            <ImagePicker
+              draftId={draft.id}
+              imageUrl={imageUrl}
+              onChange={setImageUrl}
+              defaultQuery={title}
+              disabled={isFinal}
+            />
+          </div>
+
+          <StationPicker
+            idPrefix={draft.id}
+            selected={selectedStations}
+            onChange={setSelectedStations}
             disabled={isFinal}
+            showSelectAll
           />
         </div>
 
-        <StationPicker
-          idPrefix={draft.id}
-          selected={selectedStations}
-          onChange={setSelectedStations}
-          disabled={isFinal}
-        />
-
         {publications.length > 0 && (
-          <>
+          <div className="flex flex-col gap-4 lg:col-span-2">
             <Separator />
             <PublicationStatus draftId={draft.id} publications={publications} />
-          </>
+          </div>
         )}
       </CardContent>
 
       {!isFinal && (
-        <CardFooter className="flex flex-col items-stretch gap-3 border-t pt-5">
+        <CardFooter className="flex flex-col items-stretch gap-2 border-t bg-muted/40 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {problems.length > 0 ? `To publish, add ${problems.join(", ")}.` : "Ready to publish."}
+          </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               variant="ghost"
-              className="h-11 px-4 text-muted-foreground"
+              className="h-10 px-4 text-muted-foreground hover:text-destructive"
               onClick={() => setConfirmDiscardOpen(true)}
               disabled={isPending}
             >
+              <Trash2Icon aria-hidden="true" />
               Discard
             </Button>
             <Button
               variant="outline"
-              className="h-11 px-5"
+              className="h-10 px-4"
               disabled={isPending}
               onClick={() => run("save", () => updateDraft(draft.id, edits()), "Draft saved")}
             >
@@ -180,14 +214,14 @@ export function DraftCard({
             </Button>
             {draft.status === "new" && (
               <Button
-                variant="secondary"
-                className="h-11 px-5"
+                variant="outline"
+                className="h-10 px-4"
                 disabled={isPending}
                 onClick={() =>
                   run(
                     "ready",
                     () => updateDraft(draft.id, { ...edits(), status: "ready" }),
-                    "Marked ready"
+                    "Marked ready",
                   )
                 }
               >
@@ -196,18 +230,14 @@ export function DraftCard({
               </Button>
             )}
             <Button
-              className="h-11 px-6 text-base"
+              className="h-10 px-5"
               disabled={isPending || problems.length > 0}
               onClick={() => setPublishOpen(true)}
             >
-              {context.publishMode === "draft" ? "Publish (draft mode)" : "Publish"}
+              <SendIcon aria-hidden="true" />
+              {context.publishMode === "draft" ? "Publish as draft" : "Publish"}
             </Button>
           </div>
-          {problems.length > 0 && (
-            <p className="text-right text-sm text-muted-foreground">
-              To publish, add {problems.join(", ")}.
-            </p>
-          )}
         </CardFooter>
       )}
 
@@ -226,8 +256,8 @@ export function DraftCard({
           <DialogHeader>
             <DialogTitle>Discard this draft?</DialogTitle>
             <DialogDescription>
-              It will be marked as discarded and dropped from the active queue. You can still
-              find it under the Discarded filter.
+              It will be marked as discarded and dropped from the active queue. You can still find
+              it under the Discarded filter.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

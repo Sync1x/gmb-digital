@@ -18,7 +18,7 @@ Phases 1–3 are built. The MainWP live test is still pending: see "Results" in 
 
 ## Where things live
 
-- `src/app/(app)/`: signed-in pages sharing the header/nav layout
+- `src/app/(app)/`: signed-in pages sharing the shadcn sidebar layout (`components/app-sidebar.tsx`, `site-header.tsx`, `page-header.tsx`). Font is Inter.
   - `page.tsx` is the queue: draft cards with a status filter
   - `new/` is the manual composer (Phase 3)
   - `history/` lists published posts
@@ -31,6 +31,7 @@ Phases 1–3 are built. The MainWP live test is still pending: see "Results" in 
   - `0001` creates drafts
   - `0002` creates the `featured` bucket
   - `0003` creates publications
+  - `0004` pins `set_updated_at()`'s search_path (Supabase security advisor)
 - Publishing runs from the browser: one `publishStationAction` per station in sequence, then `finalizeDraftAction`, which marks the draft published when every station is complete. A station is complete when its WP post is confirmed and, in live mode, Facebook has fired. Retrying reuses an existing WP post, so only the webhook is re-fired.
 - `PUBLISH_MODE` defaults to `draft` (WP drafts, no Facebook). Only `PUBLISH_MODE=live` publishes for real.
 

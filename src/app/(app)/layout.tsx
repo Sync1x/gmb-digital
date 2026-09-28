@@ -1,8 +1,9 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { getPublishMode } from "@/lib/publish-mode";
-import { MainNav } from "@/components/main-nav";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SiteHeader } from "@/components/site-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const supabase = await createClient();
@@ -11,50 +12,38 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       data: { user },
     },
     { count: newCount },
+    cookieStore,
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase
       .from("drafts")
       .select("id", { count: "exact", head: true })
       .eq("status", "new"),
+    cookies(),
   ]);
 
-  const isDraftMode = getPublishMode() === "draft";
+  // The sidebar remembers whether it was collapsed in this cookie.
+  const sidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="border-b bg-white">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="text-lg font-semibold tracking-tight">GMB Digital</span>
-            {isDraftMode && (
-              <Badge
-                variant="outline"
-                className="border-amber-400 bg-amber-50 px-2.5 py-1 text-amber-900"
-                title="PUBLISH_MODE=draft: posts are created as WordPress drafts and Facebook webhooks are skipped."
-              >
-                Draft mode: nothing goes live
-              </Badge>
-            )}
-            <MainNav newCount={newCount ?? 0} />
-          </div>
-          <div className="flex items-center gap-3">
-            {user?.email && (
-              <span className="hidden text-sm text-muted-foreground sm:inline">
-                {user.email}
-              </span>
-            )}
-            <form action="/auth/logout" method="post">
-              <Button variant="outline" type="submit">
-                Sign out
-              </Button>
-            </form>
-          </div>
+    <SidebarProvider defaultOpen={sidebarOpen}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:ring-2 focus:ring-ring"
+      >
+        Skip to content
+      </a>
+      <AppSidebar email={user?.email ?? null} newCount={newCount ?? 0} />
+      <SidebarInset>
+        <SiteHeader isDraftMode={getPublishMode() === "draft"} />
+        <div
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8 outline-none sm:px-6 lg:px-8"
+        >
+          {children}
         </div>
-      </header>
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-8">
-        {children}
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

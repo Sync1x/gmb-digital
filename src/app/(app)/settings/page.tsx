@@ -4,6 +4,7 @@ import { getPublishMode, getTestSiteId } from "@/lib/publish-mode";
 import { isAiEnabled } from "@/lib/ai";
 import { isImageSearchConfigured } from "@/lib/image-search";
 import { TestConnectionButton } from "@/components/test-connection-button";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,12 +47,20 @@ function matchStation(station: Station, sites: MainwpSite[]): Match {
   if (byHost) return { kind: "suggested", site: byHost };
   const name = normalize(station.name);
   const byName = sites.find(
-    (s) => normalize(s.name).includes(name) || normalize(s.url).includes(name)
+    (s) => normalize(s.name).includes(name) || normalize(s.url).includes(name),
   );
   return byName ? { kind: "suggested", site: byName } : { kind: "none" };
 }
 
-function YesNo({ value, yes = "Set", no = "Not set" }: { value: boolean; yes?: string; no?: string }) {
+function YesNo({
+  value,
+  yes = "Set",
+  no = "Not set",
+}: {
+  value: boolean;
+  yes?: string;
+  no?: string;
+}) {
   return <Badge variant={value ? "secondary" : "outline"}>{value ? yes : no}</Badge>;
 }
 
@@ -68,17 +77,17 @@ export default async function SettingsPage() {
     }
   }
 
+  // MainWP's basic site list usually omits status; only show the column if it's there.
+  const showStatus = sites.some((site) => site.status);
   const publishMode = getPublishMode();
   const testSiteId = getTestSiteId();
 
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          MainWP connection, station mapping and integrations. Secrets are never shown here.
-        </p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="MainWP connection, station mapping and integrations. Secrets are never shown here."
+      />
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
@@ -99,8 +108,8 @@ export default async function SettingsPage() {
             <Alert>
               <AlertTitle>MainWP isn&apos;t set up yet</AlertTitle>
               <AlertDescription>
-                Add MAINWP_URL (your MainWP dashboard address) and MAINWP_API_KEY (MainWP →
-                API Access → API Keys) to .env.local, then restart the app.
+                Add MAINWP_URL (your MainWP dashboard address) and MAINWP_API_KEY (MainWP → API
+                Access → API Keys) to .env.local, then restart the app.
               </AlertDescription>
             </Alert>
           )}
@@ -120,7 +129,7 @@ export default async function SettingsPage() {
                   <TableHead className="w-20">Site ID</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>URL</TableHead>
-                  <TableHead>Status</TableHead>
+                  {showStatus && <TableHead>Status</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -129,7 +138,7 @@ export default async function SettingsPage() {
                     <TableCell className="font-mono">{site.id}</TableCell>
                     <TableCell>{site.name}</TableCell>
                     <TableCell className="text-muted-foreground">{site.url}</TableCell>
-                    <TableCell>{site.status ?? "—"}</TableCell>
+                    {showStatus && <TableCell>{site.status ?? "—"}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>
@@ -142,8 +151,8 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>Stations</CardTitle>
           <CardDescription>
-            From src/config/stations.ts. Once you&apos;ve confirmed the matches below, copy each
-            MainWP site ID into that file.
+            Each station posts to the MainWP site shown here. The mapping lives in
+            src/config/stations.ts.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -167,7 +176,9 @@ export default async function SettingsPage() {
                     <TableCell className="whitespace-normal">
                       {match.kind === "matched" && (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">Matched</Badge>
+                          <Badge className="bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 ring-inset">
+                            Matched
+                          </Badge>
                           <span>
                             #{match.site.id} · {match.site.name}
                           </span>
@@ -176,7 +187,10 @@ export default async function SettingsPage() {
                       {match.kind === "missing" && (
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="destructive">Not found</Badge>
-                          <span>ID {match.id} isn&apos;t a MainWP site{sites.length === 0 ? " (couldn't check)" : ""}</span>
+                          <span>
+                            ID {match.id} isn&apos;t a MainWP site
+                            {sites.length === 0 ? " (couldn't check)" : ""}
+                          </span>
                         </div>
                       )}
                       {match.kind === "suggested" && (
@@ -216,7 +230,10 @@ export default async function SettingsPage() {
                   {publishMode === "live" ? (
                     <Badge variant="destructive">Live: posts go public and Facebook fires</Badge>
                   ) : (
-                    <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+                    <Badge
+                      variant="outline"
+                      className="border-amber-400 bg-amber-50 text-amber-900"
+                    >
                       Draft: WordPress drafts only, no Facebook
                     </Badge>
                   )}
@@ -228,7 +245,9 @@ export default async function SettingsPage() {
                   {testSiteId ? (
                     <span>All posts go to MainWP site #{testSiteId} (draft mode only)</span>
                   ) : (
-                    <span className="text-muted-foreground">Off: each station posts to its own site</span>
+                    <span className="text-muted-foreground">
+                      Off: each station posts to its own site
+                    </span>
                   )}
                 </TableCell>
               </TableRow>

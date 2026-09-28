@@ -1,6 +1,7 @@
 "use client";
 
 import { stations } from "@/config/stations";
+import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,14 @@ export function StationPicker({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-sm font-medium">Stations</Label>
+    <fieldset className="@container flex min-w-0 flex-col gap-2">
+      <legend className="mb-2 flex w-full items-center justify-between gap-2 text-sm font-medium">
+        <span>
+          Stations{" "}
+          <span className="font-normal text-muted-foreground">
+            ({selected.length} of {stations.length})
+          </span>
+        </span>
         {showSelectAll && !disabled && (
           <Button
             variant="link"
@@ -38,25 +44,31 @@ export function StationPicker({
             {allSelected ? "Clear all" : "Select all"}
           </Button>
         )}
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      </legend>
+      <div className="grid grid-cols-1 gap-1.5 @xs:grid-cols-2 @2xl:grid-cols-3">
         {stations.map((station) => {
           const id = `${idPrefix}-${station.slug}`;
+          const checked = selected.includes(station.slug);
           return (
-            <div key={station.slug} className="flex items-center gap-2">
+            <Label
+              key={station.slug}
+              htmlFor={id}
+              className={cn(
+                "flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 font-normal transition-colors has-disabled:cursor-not-allowed has-disabled:opacity-60",
+                checked ? "border-primary/40 bg-muted" : "hover:bg-muted/60"
+              )}
+            >
               <Checkbox
                 id={id}
-                checked={selected.includes(station.slug)}
+                checked={checked}
                 disabled={disabled}
-                onCheckedChange={(checked) => toggle(station.slug, checked === true)}
+                onCheckedChange={(value) => toggle(station.slug, value === true)}
               />
-              <Label htmlFor={id} className="font-normal">
-                {station.name}
-              </Label>
-            </div>
+              {station.name}
+            </Label>
           );
         })}
       </div>
-    </div>
+    </fieldset>
   );
 }

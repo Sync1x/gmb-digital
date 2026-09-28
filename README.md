@@ -47,6 +47,7 @@ Use draft mode whenever you're testing or changing something.
    - `0001_create_drafts.sql`
    - `0002_featured_storage_bucket.sql`
    - `0003_create_publications.sql`
+   - `0004_pin_set_updated_at_search_path.sql`
 3. **Authentication → Users → Add user**: create an email and password for each person who will use the app.
 4. **Project Settings → API**: copy the Project URL, the `anon` key and the `service_role` key.
 
@@ -80,9 +81,7 @@ Add them to `.env.local` for local use, and to Vercel under **Project → Settin
 
 ### 5. Connect the stations
 
-1. Sign in and open **Settings**. It lists every MainWP site with its **ID**.
-2. Open `src/config/stations.ts`. For each station, fill in `mainwpSiteId` (and `siteUrl`), then commit and deploy.
-3. Settings will show **Matched** next to each station once it's set up.
+The six stations are already mapped in `src/config/stations.ts` (Moo 92 → 6, Magic 97.7 → 5, Notch FM → 1, JJ Country → 3, KIX 105.5 → 2, WSTJ 1340 → 4). **Settings** shows **Matched** next to each one. If a site is ever re-added to MainWP and gets a new ID, update that file, then commit and deploy.
 
 ### 6. Make.com
 

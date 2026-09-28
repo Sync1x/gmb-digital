@@ -1,8 +1,14 @@
+import Link from "next/link";
+import { PlusIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DraftCard } from "@/components/draft-card";
 import { StatusFilter } from "@/components/status-filter";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getDraftCardContext } from "@/lib/draft-card-context";
+import { cn } from "@/lib/utils";
 import type { Draft, DraftStatus, Publication } from "@/lib/types";
 
 const VALID_STATUSES: DraftStatus[] = ["new", "ready", "published", "discarded"];
@@ -31,25 +37,37 @@ export default async function QueuePage({
     query = query.neq("status", "discarded");
   }
 
-  const { data, error } = await query;
+  const [{ data, error }, { data: statusRows }] = await Promise.all([
+    query,
+    supabase.from("drafts").select("status"),
+  ]);
   const drafts = (data ?? []) as (Draft & { publications: Publication[] })[];
+  const counts: Partial<Record<DraftStatus, number>> = {};
+  for (const row of (statusRows ?? []) as { status: DraftStatus }[]) {
+    counts[row.status] = (counts[row.status] ?? 0) + 1;
+  }
   const context = getDraftCardContext();
 
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Queue</h1>
-        <p className="text-sm text-muted-foreground">
-          Review incoming news, pick an image and stations, then publish.
-        </p>
-      </div>
+      <PageHeader
+        title="Queue"
+        description="Review incoming news, pick an image and stations, then publish."
+        actions={
+          <Link href="/new" className={cn(buttonVariants(), "h-9 px-4")}>
+            <PlusIcon aria-hidden="true" />
+            New post
+          </Link>
+        }
+      />
 
-      <StatusFilter active={status ?? "all"} />
+      <StatusFilter active={status ?? "all"} counts={counts} />
 
       {error && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          Couldn&apos;t load drafts: {error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertTitle>Couldn&apos;t load drafts</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
       )}
 
       {!error && drafts.length === 0 && (
@@ -60,16 +78,15 @@ export default async function QueuePage({
         />
       )}
 
-      <div className="flex flex-col gap-4">
-        {drafts.map((draft) => (
-          <DraftCard
-            key={draft.id}
-            draft={draft}
-            publications={draft.publications}
-            context={context}
-          />
-        ))}
-      </div>
+      {drafts.length > 0 && (
+        <ul className="flex flex-col gap-4" aria-label="Drafts">
+          {drafts.map((draft) => (
+            <li key={draft.id}>
+              <DraftCard draft={draft} publications={draft.publications} context={context} />
+            </li>
+          ))}
+        </ul>
+      )}
     </>
   );
 }

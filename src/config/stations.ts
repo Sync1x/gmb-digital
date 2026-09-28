@@ -14,52 +14,52 @@ export type Station = {
 };
 
 /**
- * The six Green Mountain Broadcasters station sites. Open /settings to see
- * every MainWP child site and its ID, then fill in mainwpSiteId and siteUrl
- * here. Add a matching MAKE_WEBHOOK_* var to .env.local / Vercel for each.
+ * The six Green Mountain Broadcasters station sites, with their MainWP child
+ * site IDs (see /settings). Add a matching MAKE_WEBHOOK_* var to .env.local /
+ * Vercel for each station's Facebook scenario.
  */
 export const stations: Station[] = [
   {
     name: "Moo 92",
     slug: "moo-92",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
+    siteUrl: "https://moo92.com",
+    mainwpSiteId: "6",
     makeWebhookEnvVar: "MAKE_WEBHOOK_MOO_92",
   },
   {
     name: "Magic 97.7",
     slug: "magic-97-7",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
+    siteUrl: "https://magic977.com",
+    mainwpSiteId: "5",
     makeWebhookEnvVar: "MAKE_WEBHOOK_MAGIC_97_7",
   },
   {
     name: "Notch FM",
     slug: "notch-fm",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
+    siteUrl: "https://notchfm.com",
+    mainwpSiteId: "1",
     makeWebhookEnvVar: "MAKE_WEBHOOK_NOTCH_FM",
   },
   {
-    name: "Station 4",
-    slug: "station-4",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
-    makeWebhookEnvVar: "MAKE_WEBHOOK_STATION_4",
+    name: "JJ Country",
+    slug: "jj-country",
+    siteUrl: "https://jjcountry.com",
+    mainwpSiteId: "3",
+    makeWebhookEnvVar: "MAKE_WEBHOOK_JJ_COUNTRY",
   },
   {
-    name: "Station 5",
-    slug: "station-5",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
-    makeWebhookEnvVar: "MAKE_WEBHOOK_STATION_5",
+    name: "KIX 105.5",
+    slug: "kix-105-5",
+    siteUrl: "https://kix1055.com",
+    mainwpSiteId: "2",
+    makeWebhookEnvVar: "MAKE_WEBHOOK_KIX_105_5",
   },
   {
-    name: "Station 6",
-    slug: "station-6",
-    siteUrl: "TODO",
-    mainwpSiteId: "TODO",
-    makeWebhookEnvVar: "MAKE_WEBHOOK_STATION_6",
+    name: "WSTJ 1340",
+    slug: "wstj-1340",
+    siteUrl: "https://wstj1340.com",
+    mainwpSiteId: "4",
+    makeWebhookEnvVar: "MAKE_WEBHOOK_WSTJ_1340",
   },
 ];
 
