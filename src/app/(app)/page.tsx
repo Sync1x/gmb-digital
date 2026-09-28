@@ -46,13 +46,13 @@ export default async function QueuePage({
   for (const row of (statusRows ?? []) as { status: DraftStatus }[]) {
     counts[row.status] = (counts[row.status] ?? 0) + 1;
   }
-  const context = getDraftCardContext();
+  const context = await getDraftCardContext();
 
   return (
     <>
       <PageHeader
         title="Queue"
-        description="Review incoming news, pick an image and stations, then publish."
+        description="Review incoming news, pick an image, stations and categories, then approve to publish."
         actions={
           <Link href="/new" className={cn(buttonVariants(), "h-9 px-4")}>
             <PlusIcon aria-hidden="true" />

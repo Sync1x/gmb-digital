@@ -9,8 +9,6 @@ export type Station = {
   mainwpSiteId: string;
   /** Name of the env var holding this station's Make.com Facebook webhook URL. */
   makeWebhookEnvVar: string;
-  /** WordPress category names new posts are filed under (optional). */
-  wpCategories?: string[];
 };
 
 /**

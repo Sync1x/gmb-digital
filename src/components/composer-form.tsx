@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { SendIcon } from "lucide-react";
+import { FileTextIcon, SendIcon } from "lucide-react";
 import { saveManualDraft } from "@/app/actions";
 import { getPublishProblems } from "@/lib/publications";
-import type { DraftCardContext } from "@/lib/types";
+import type { DraftCardContext, PublishTarget } from "@/lib/types";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ImagePicker } from "@/components/image-picker";
 import { StationPicker } from "@/components/station-picker";
+import { CategoryPicker } from "@/components/category-picker";
 import { SuggestTitleButton } from "@/components/suggest-title-button";
 import { PublishDialog } from "@/components/publish-dialog";
 
@@ -26,7 +27,8 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
   const [body, setBody] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
-  const [publishOpen, setPublishOpen] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
   const [isSaving, startSave] = useTransition();
 
   const problems = getPublishProblems({
@@ -43,6 +45,7 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
       body,
       sender,
       stations: selectedStations,
+      categories,
       featuredImageUrl: imageUrl,
       status,
     });
@@ -131,12 +134,24 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
             onChange={setSelectedStations}
             showSelectAll
           />
+
+          <CategoryPicker
+            id="composer-categories"
+            selectedStations={selectedStations}
+            categoriesByStation={context.categoriesByStation}
+            value={categories}
+            onChange={setCategories}
+          />
         </div>
       </CardContent>
 
-      <CardFooter className="flex flex-col items-stretch gap-2 border-t bg-muted/40 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <CardFooter className="flex flex-col items-stretch gap-3 border-t bg-muted/40 py-3 xl:flex-row xl:items-center xl:justify-between">
         <p className="text-sm text-muted-foreground" aria-live="polite">
-          {problems.length > 0 ? `To publish, add ${problems.join(", ")}.` : "Ready to publish."}
+          {problems.length > 0
+            ? `To publish, add ${problems.join(", ")}.`
+            : context.liveEnabled
+              ? "Ready to publish."
+              : "Live publishing is off here, so it can only be saved as a WordPress draft."}
         </p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button
@@ -149,24 +164,35 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
             Save to queue
           </Button>
           <Button
-            className="h-10 px-5"
-            onClick={() => setPublishOpen(true)}
+            variant="outline"
+            className="h-10 px-4"
+            onClick={() => setPublishTarget("draft")}
             disabled={isSaving || problems.length > 0}
           >
+            <FileTextIcon aria-hidden="true" />
+            Save as WordPress draft
+          </Button>
+          <Button
+            className="h-10 px-5"
+            onClick={() => setPublishTarget("live")}
+            disabled={isSaving || problems.length > 0 || !context.liveEnabled}
+          >
             <SendIcon aria-hidden="true" />
-            {context.publishMode === "draft" ? "Publish as draft" : "Publish now"}
+            Publish now
           </Button>
         </div>
       </CardFooter>
 
       <PublishDialog
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
+        open={publishTarget !== null}
+        onOpenChange={(open) => !open && setPublishTarget(null)}
         title={title}
         stationSlugs={selectedStations}
-        publishMode={context.publishMode}
+        target={publishTarget ?? "draft"}
         prepare={() => save("ready")}
-        onFinished={({ allOk }) => router.push(allOk ? "/history" : "/?status=ready")}
+        onFinished={({ allOk }) =>
+          router.push(allOk && publishTarget === "live" ? "/history" : "/?status=ready")
+        }
       />
     </Card>
   );

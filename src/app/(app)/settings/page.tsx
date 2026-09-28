@@ -1,6 +1,6 @@
 import { stations, isConfigured, type Station } from "@/config/stations";
 import { isMainwpConfigured, listSites, type MainwpSite } from "@/lib/mainwp";
-import { getPublishMode, getTestSiteId } from "@/lib/publish-mode";
+import { getTestSiteId, isLiveEnabled } from "@/lib/publish-mode";
 import { isAiEnabled } from "@/lib/ai";
 import { isImageSearchConfigured } from "@/lib/image-search";
 import { TestConnectionButton } from "@/components/test-connection-button";
@@ -79,7 +79,7 @@ export default async function SettingsPage() {
 
   // MainWP's basic site list usually omits status; only show the column if it's there.
   const showStatus = sites.some((site) => site.status);
-  const publishMode = getPublishMode();
+  const liveEnabled = isLiveEnabled();
   const testSiteId = getTestSiteId();
 
   return (
@@ -225,16 +225,21 @@ export default async function SettingsPage() {
           <Table>
             <TableBody>
               <TableRow>
-                <TableCell className="font-medium">Publish mode</TableCell>
+                <TableCell className="font-medium">Live publishing</TableCell>
                 <TableCell>
-                  {publishMode === "live" ? (
-                    <Badge variant="destructive">Live: posts go public and Facebook fires</Badge>
+                  {liveEnabled ? (
+                    <Badge
+                      variant="outline"
+                      className="border-emerald-300 bg-emerald-50 text-emerald-900"
+                    >
+                      On: Approve &amp; publish goes public and posts to Facebook
+                    </Badge>
                   ) : (
                     <Badge
                       variant="outline"
                       className="border-amber-400 bg-amber-50 text-amber-900"
                     >
-                      Draft: WordPress drafts only, no Facebook
+                      Off: WordPress drafts only, no Facebook (set PUBLISH_MODE=live)
                     </Badge>
                   )}
                 </TableCell>
@@ -243,7 +248,7 @@ export default async function SettingsPage() {
                 <TableCell className="font-medium">Test site override</TableCell>
                 <TableCell>
                   {testSiteId ? (
-                    <span>All posts go to MainWP site #{testSiteId} (draft mode only)</span>
+                    <span>All posts go to MainWP site #{testSiteId} (only while live publishing is off)</span>
                   ) : (
                     <span className="text-muted-foreground">
                       Off: each station posts to its own site

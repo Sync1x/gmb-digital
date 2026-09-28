@@ -7,7 +7,7 @@ import { CheckIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import { finalizeDraftAction, publishStationAction } from "@/app/publish-actions";
 import { getStationBySlug } from "@/config/stations";
 import { isPublicationComplete } from "@/lib/publications";
-import type { Publication } from "@/lib/types";
+import type { Publication, PublishTarget } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -99,17 +99,23 @@ export function PublicationStatus({
 }) {
   const router = useRouter();
   const [retrying, setRetrying] = useState<string | null>(null);
+  // Retry as whatever the last run was aiming for: live once any station went live.
+  const retryTarget: PublishTarget = publications.some((p) => p.publish_mode === "live")
+    ? "live"
+    : "draft";
 
   async function retry(slug: string) {
     setRetrying(slug);
-    const result = await publishStationAction(draftId, slug);
+    const result = await publishStationAction(draftId, slug, retryTarget);
     if (result.ok && isPublicationComplete(result.data)) {
       toast.success(`${getStationBySlug(slug)?.name ?? slug}: done`);
     } else {
       toast.error(result.ok ? (result.data.error ?? "Still failing") : result.error);
     }
-    const fin = await finalizeDraftAction(draftId);
-    if (fin.ok && fin.data.published) toast.success("All stations done: draft marked published");
+    const fin = await finalizeDraftAction(draftId, retryTarget);
+    if (fin.ok && fin.data.done && retryTarget === "live") {
+      toast.success("All stations done: marked published");
+    }
     setRetrying(null);
     router.refresh();
   }
@@ -118,7 +124,7 @@ export function PublicationStatus({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-muted-foreground">Publish results</span>
+      <span className="text-sm font-medium text-muted-foreground">WordPress</span>
       {publications
         .slice()
         .sort((a, b) => a.station_slug.localeCompare(b.station_slug))

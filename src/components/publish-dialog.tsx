@@ -4,7 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { finalizeDraftAction, publishStationAction } from "@/app/publish-actions";
 import { getStationBySlug } from "@/config/stations";
-import { isPublicationComplete } from "@/lib/publications";
+import { isDoneFor, isWordpressDraft } from "@/lib/publications";
+import type { Publication, PublishTarget } from "@/lib/types";
 import { StationResultRow, type StationRunState } from "@/components/publication-status";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,10 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   title: string;
   stationSlugs: string[];
-  publishMode: "draft" | "live";
+  /** "draft" = WordPress drafts only; "live" = publish and post to Facebook. */
+  target: PublishTarget;
+  /** Earlier results for this draft, to show which stations already have a WordPress draft. */
+  publications?: Publication[];
   /** Saves current edits and returns the draft id to publish (null = abort). */
   prepare: () => Promise<string | null>;
   /** Called when the dialog closes after a run. */
@@ -37,7 +41,8 @@ export function PublishDialog({
   onOpenChange,
   title,
   stationSlugs,
-  publishMode,
+  target,
+  publications = [],
   prepare,
   onFinished,
 }: Props) {
@@ -53,18 +58,18 @@ export function PublishDialog({
 
   async function runStation(id: string, slug: string): Promise<boolean> {
     setRun(slug, { state: "running" });
-    const result = await publishStationAction(id, slug);
+    const result = await publishStationAction(id, slug, target);
     if (!result.ok) {
       setRun(slug, { state: "error", error: result.error });
       return false;
     }
     setRun(slug, { state: "done", publication: result.data });
-    return isPublicationComplete(result.data);
+    return isDoneFor(result.data, target);
   }
 
   async function finalize(id: string) {
-    const fin = await finalizeDraftAction(id);
-    const ok = fin.ok && fin.data.published;
+    const fin = await finalizeDraftAction(id, target);
+    const ok = fin.ok && fin.data.done;
     setAllOk(ok);
     return ok;
   }
@@ -89,8 +94,8 @@ export function PublishDialog({
     setPhase("done");
     if (ok) {
       toast.success(
-        publishMode === "draft"
-          ? `Created WordPress drafts on ${stationSlugs.length} station${stationSlugs.length === 1 ? "" : "s"}`
+        target === "draft"
+          ? `Saved WordPress drafts on ${stationSlugs.length} station${stationSlugs.length === 1 ? "" : "s"}`
           : `Published to ${stationSlugs.length} station${stationSlugs.length === 1 ? "" : "s"}`
       );
     } else {
@@ -126,11 +131,13 @@ export function PublishDialog({
         <DialogHeader>
           <DialogTitle>
             {phase === "confirm"
-              ? publishMode === "draft"
-                ? "Create WordPress drafts?"
+              ? target === "draft"
+                ? "Save as WordPress drafts?"
                 : "Publish now?"
               : phase === "running"
-                ? "Publishing…"
+                ? target === "draft"
+                  ? "Saving drafts…"
+                  : "Publishing…"
                 : allOk
                   ? "Done"
                   : "Finished with errors"}
@@ -140,27 +147,42 @@ export function PublishDialog({
 
         {phase === "confirm" && (
           <div className="flex flex-col gap-3">
-            {publishMode === "draft" ? (
+            {target === "draft" ? (
               <Alert>
                 <AlertDescription>
-                  Draft mode: posts are created as WordPress <strong>drafts</strong> and Facebook
-                  is not triggered.
+                  Saved as <strong>drafts</strong> on each site below. Nothing goes public and
+                  Facebook isn&apos;t triggered. Approve it from the queue when it&apos;s ready.
                 </AlertDescription>
               </Alert>
             ) : (
               <Alert variant="destructive">
                 <AlertDescription>
-                  Live mode: this goes public on each site below and is then posted to its
-                  Facebook page.
+                  This goes public on each site below, then posts to that station&apos;s Facebook
+                  page.
                 </AlertDescription>
               </Alert>
             )}
             <ul className="flex flex-col gap-1.5">
-              {stationSlugs.map((slug) => (
-                <li key={slug} className="rounded-md border px-3 py-2 font-medium">
-                  {getStationBySlug(slug)?.name ?? slug}
-                </li>
-              ))}
+              {stationSlugs.map((slug) => {
+                const pub = publications.find((p) => p.station_slug === slug);
+                const note =
+                  pub?.status === "published" && pub.publish_mode === "live"
+                    ? "Already live"
+                    : pub && isWordpressDraft(pub)
+                      ? target === "live"
+                        ? "Publishes its WordPress draft"
+                        : "Updates its WordPress draft"
+                      : "New post";
+                return (
+                  <li
+                    key={slug}
+                    className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                  >
+                    <span className="font-medium">{getStationBySlug(slug)?.name ?? slug}</span>
+                    <span className="text-sm text-muted-foreground">{note}</span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -186,8 +208,8 @@ export function PublishDialog({
                 Cancel
               </Button>
               <Button className="h-11 px-6 text-base" onClick={handlePublish}>
-                {publishMode === "draft"
-                  ? `Create ${stationSlugs.length} draft${stationSlugs.length === 1 ? "" : "s"}`
+                {target === "draft"
+                  ? `Save ${stationSlugs.length} draft${stationSlugs.length === 1 ? "" : "s"}`
                   : `Publish to ${stationSlugs.length} station${stationSlugs.length === 1 ? "" : "s"}`}
               </Button>
             </>

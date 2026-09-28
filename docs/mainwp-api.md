@@ -5,10 +5,7 @@ Source of truth: the official OpenAPI spec
 the docs overview (<https://docs.mainwp.com/api-reference/rest-api/overview>) and the
 public Postman workspace "MainWP REST API v2 (Current)".
 
-> **Live-test status: NOT YET RUN.** When this was written, `.env.local` had no
-> `MAINWP_URL` / `MAINWP_API_KEY`. Everything below comes from the spec. The client in
-> `src/lib/mainwp.ts` parses responses defensively (see "Response shapes"). Once the
-> key is in place, run the checks in "How to verify" and update this file with the results.
+> **Live-tested on 2026-09-28** against moo92.com (MainWP site 6). See "Results".
 
 ## Auth
 
@@ -27,7 +24,8 @@ public Postman workspace "MainWP REST API v2 (Current)".
 | List child sites | `GET /wp-json/mainwp/v2/sites/basic?per_page=100` |
 | Create a post on one child site (incl. featured image) | `POST /wp-json/mainwp/v2/posts/{id_domain}/create` |
 | Read one post back | `GET /wp-json/mainwp/v2/posts/{id_domain}/{id_post}` |
-| Change status (publish / trash / delete…) | `PUT /wp-json/mainwp/v2/posts/{id_domain}/{id_post}/update-status` |
+| Update a post (content, categories, status: this is how a draft goes live) | `PUT /wp-json/mainwp/v2/posts/{id_domain}/{id_post}/edit` |
+| Change status only (**fails on drafts**, see Results) | `PUT /wp-json/mainwp/v2/posts/{id_domain}/{id_post}/update-status` |
 
 `{id_domain}` can be the MainWP **site ID** (numeric) or the site's domain. We always
 use the numeric ID, which is stored in `src/config/stations.ts`.
@@ -48,7 +46,7 @@ The API requires `post_title`, `post_content`, `post_status` and `post_name`.
 | `post_content` | HTML string |
 | `post_status` | `publish` \| `pending` \| `private` \| `future` \| `draft` \| `trash` |
 | `post_name` | slug (required by the API; we generate it from the title) |
-| `post_category` | "raw string" of categories (comma-separated names) |
+| `post_category` | "raw string" of categories, comma-separated. Send **slugs** (see Results) |
 | `post_tags` | string |
 | `post_excerpt`, `post_date`, `post_date_gmt`, `comment_status`, `ping_status`, `is_sticky`, `post_custom`, `post_password` | optional |
 | **`post_featured_image`** | **"Featured image URL or data."** The child site downloads the URL into its own media library and sets it as the post thumbnail. This is the same mechanism MainWP uses for its own "Add New Post" screen (`MainWP_Child_Posts::create_featured_image`). |
@@ -104,4 +102,22 @@ That was true of **v1**. v2 added the Posts CRUD routes above.
 
 ## Results
 
-_Not run yet: no MainWP credentials in `.env.local`._
+Tested 2026-09-28 on moo92.com (site 6) with a throwaway draft, which was then trashed.
+
+- **Create** returns `{"success":1,"data":{"post_id":280285,"link":"https://moo92.com/?p=280285"}}`.
+  The ID is in `data.post_id`, and `data.link` is the `?p=` short link (it redirects to the permalink).
+- **Get one post** returns `post_title`, `post_status`, `post_category` (comma-separated names),
+  `post_featured_image` and `post_custom` (which includes `_thumbnail_id`). It has no `link` field.
+- **Edit** (`PUT …/edit`) updates the title, content, categories and status, and keeps the featured image.
+  On a draft it also moves `post_date` to now, so a post published later isn't backdated.
+  `post_status: "publish"` publishes the draft, and `"trash"` trashes it.
+- **update-status** returned `{"success":0,"message":"Update post status failed."}` when asked to trash
+  a draft. Use `edit` with `post_status` instead.
+- **Categories must be sent as slugs.** The child site matches `post_category` entries by slug first,
+  then by name, and creates any that are missing. On Moo 92, the real "Local News" category has
+  the slug `local_news`. A stray category literally named `"Local News"` (with quotes) owns the
+  slug `local-news`, so sending the name `Local News` filed the post under the stray one. Sending
+  `local_news` gets the right one. JJ Country has the same stray category. The app reads each
+  site's categories from its public `/wp-json/wp/v2/categories` and sends slugs (`src/lib/wordpress.ts`).
+- Moo 92's server sometimes closes the HTTP/2 connection (`GOAWAY`) right after a write. The write
+  still goes through.

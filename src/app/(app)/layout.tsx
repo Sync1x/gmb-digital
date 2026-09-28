@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getPublishMode } from "@/lib/publish-mode";
+import { isLiveEnabled } from "@/lib/publish-mode";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </a>
       <AppSidebar email={user?.email ?? null} newCount={newCount ?? 0} />
       <SidebarInset>
-        <SiteHeader isDraftMode={getPublishMode() === "draft"} />
+        <SiteHeader isDraftMode={!isLiveEnabled()} />
         <div
           id="main-content"
           tabIndex={-1}

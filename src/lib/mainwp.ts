@@ -20,7 +20,11 @@ export type CreatePostInput = {
   /** HTML content. */
   content: string;
   status: WpPostStatus;
-  /** Category names; sent as MainWP's comma-separated raw string. */
+  /**
+   * Category slugs, sent as MainWP's comma-separated raw string. Slugs, not
+   * names: the child site matches by slug first, and a name can resolve to
+   * the wrong category when another one owns its sanitized slug.
+   */
   categories?: string[];
   /** Public URL of the featured image; the child site downloads it. */
   featuredImageUrl?: string;
@@ -71,22 +75,29 @@ async function request(
   const { baseUrl, apiKey } = getConfig();
   const url = `${baseUrl}/wp-json/mainwp/v2/${path}`;
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new MainwpError(`Couldn't reach MainWP at ${baseUrl}: ${reason}`);
+  // Some child hosts drop the connection (HTTP/2 GOAWAY) right after a write
+  // that did go through. GET and PUT are safe to repeat, so they get one retry;
+  // POST (create) doesn't, since repeating it would make a duplicate post.
+  const attempts = method === "POST" ? 1 : 2;
+  let res: Response | null = null;
+  for (let attempt = 1; !res; attempt++) {
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (err) {
+      if (attempt < attempts) continue;
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new MainwpError(`Couldn't reach MainWP at ${baseUrl}: ${reason}`);
+    }
   }
 
   const text = await res.text();
@@ -198,7 +209,7 @@ export async function createPost(input: CreatePostInput): Promise<CreatedPost> {
   >;
   const postId = str(data.id) ?? str(data.post_id) ?? str(data.ID);
   const postUrl =
-    str(data.link) ?? str(data.permalink) ?? str(data.url) ?? str(data.post_url);
+    str(data.link) ?? str(data.permalink) ?? str(data.url) ?? str(data.post_url) ?? str(data.guid);
 
   if (!postId) {
     throw new MainwpError(
@@ -207,6 +218,38 @@ export async function createPost(input: CreatePostInput): Promise<CreatedPost> {
   }
 
   return { postId, postUrl: postUrl ?? (await getPostUrl(input.siteId, postId)) };
+}
+
+export type EditPostInput = {
+  siteId: string;
+  postId: string;
+  title: string;
+  content: string;
+  status: WpPostStatus;
+  /** Category slugs (see CreatePostInput). */
+  categories?: string[];
+};
+
+/**
+ * Updates an existing post in place: content, categories and status. This is
+ * how a WordPress draft goes live (MainWP's update-status call fails on
+ * drafts; edit works). The featured image is kept, and a draft's date is
+ * reset to now when it's published, so nothing is backdated.
+ */
+export async function editPost(input: EditPostInput): Promise<void> {
+  const payload: Record<string, unknown> = {
+    post_title: input.title,
+    post_content: input.content,
+    post_status: input.status,
+  };
+  if (input.categories?.length) {
+    payload.post_category = input.categories.join(",");
+  }
+  await request(
+    "PUT",
+    `posts/${encodeURIComponent(input.siteId)}/${encodeURIComponent(input.postId)}/edit`,
+    payload
+  );
 }
 
 /** Reads a post back to find its permalink. Returns null rather than throwing. */

@@ -39,11 +39,11 @@ export function SiteHeader({ isDraftMode }: { isDraftMode: boolean }) {
               }
             >
               <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
-              Draft mode
+              Drafts only
             </TooltipTrigger>
             <TooltipContent side="bottom" align="end" className="max-w-64">
-              Posts are saved as WordPress drafts and Facebook is never triggered. Set
-              PUBLISH_MODE=live to publish for real.
+              Live publishing is off here: posts can only be saved as WordPress drafts and
+              Facebook is never triggered. Set PUBLISH_MODE=live to allow Approve &amp; publish.
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -52,7 +52,7 @@ export function SiteHeader({ isDraftMode }: { isDraftMode: boolean }) {
             className="h-6 gap-1.5 border-emerald-300 bg-emerald-50 px-2.5 text-emerald-900"
           >
             <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-            Live publishing
+            Live publishing on
           </Badge>
         )}
       </div>

@@ -1,10 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStationBySlug, isConfigured, type Station } from "@/config/stations";
-import { createPost } from "@/lib/mainwp";
-import { getPublishMode, getTestSiteId } from "@/lib/publish-mode";
+import { createPost, editPost } from "@/lib/mainwp";
+import { getTestSiteId } from "@/lib/publish-mode";
 import { textToHtml } from "@/lib/text-to-html";
-import type { Draft, Publication } from "@/lib/types";
+import { categorySlugsForStation } from "@/lib/wordpress";
+import type { Draft, Publication, PublishTarget } from "@/lib/types";
 
 /** A "pending" row younger than this is treated as a publish already in flight. */
 const IN_FLIGHT_MS = 2 * 60 * 1000;
@@ -63,21 +64,25 @@ async function triggerFacebook(
 }
 
 /**
- * Publishes one draft to one station. Safe to call again as a retry: a
- * station whose WordPress post already exists only re-fires Facebook.
+ * Sends one draft to one station, as a WordPress draft or live. Safe to call
+ * again as a retry, and to call with "live" after a "draft" run:
+ * - no post yet on this site: create it
+ * - a WordPress draft already exists: update it in place (content,
+ *   categories, and status, so approving it publishes that same post)
+ * - already live: leave WordPress alone and only retry Facebook
  *
  * Order matters: the Facebook webhook fires only after MainWP confirmed the
- * WordPress post for this station, and never in draft mode.
+ * post is live for this station, and never for a WordPress draft.
  */
 export async function publishDraftToStation(
   supabase: SupabaseClient,
   draft: Draft,
-  stationSlug: string
+  stationSlug: string,
+  target: PublishTarget
 ): Promise<Publication> {
   const station = getStationBySlug(stationSlug);
   if (!station) throw new Error(`Unknown station "${stationSlug}".`);
 
-  const mode = getPublishMode();
   const title = draft.title?.trim() ?? "";
 
   const { data: existingRow } = await supabase
@@ -95,53 +100,72 @@ export async function publishDraftToStation(
     throw new Error(`${station.name} is already being published. Wait a moment and refresh.`);
   }
 
-  // Reuse the WordPress post if it was already created in this same mode
-  // (a retry after a Facebook failure). A draft-mode test post is never
-  // reused for a live publish.
-  const alreadyPosted =
-    existing?.status === "published" && existing.wp_post_id && existing.publish_mode === mode;
+  const siteId = getTestSiteId() ?? station.mainwpSiteId;
+  if (!isConfigured(siteId)) {
+    return saveRow(supabase, draft.id, stationSlug, {
+      status: "failed",
+      mainwp_site_id: null,
+      publish_mode: "draft",
+      error: `${station.name} has no MainWP site ID yet. Set it in src/config/stations.ts (see Settings).`,
+    });
+  }
+
+  // A post made on another site (e.g. the test site) is never reused.
+  const existingPostId =
+    existing?.wp_post_id && existing.mainwp_site_id === siteId ? existing.wp_post_id : null;
+  const alreadyLive = existingPostId && existing?.publish_mode === "live";
 
   let pub: Publication;
 
-  if (alreadyPosted) {
+  if (existing && alreadyLive) {
     pub = existing;
   } else {
-    const siteId = getTestSiteId() ?? station.mainwpSiteId;
-    if (!isConfigured(siteId)) {
-      return saveRow(supabase, draft.id, stationSlug, {
-        status: "failed",
-        mainwp_site_id: null,
-        publish_mode: mode,
-        error: `${station.name} has no MainWP site ID yet. Set it in src/config/stations.ts (see Settings).`,
-      });
-    }
-
     await saveRow(supabase, draft.id, stationSlug, {
       status: "pending",
       mainwp_site_id: siteId,
-      publish_mode: mode,
-      wp_post_id: null,
-      post_url: null,
+      wp_post_id: existingPostId,
       error: null,
-      facebook_triggered_at: null,
+      ...(existingPostId ? {} : { post_url: null, publish_mode: "draft", facebook_triggered_at: null }),
     });
 
     try {
-      const created = await createPost({
+      let categories: string[];
+      try {
+        categories = await categorySlugsForStation(station, draft.categories ?? []);
+      } catch (err) {
+        throw new Error(`Couldn't read ${station.name}'s categories: ${message(err)}`);
+      }
+      const post = {
         siteId,
         title,
         content: textToHtml(draft.body),
-        status: mode === "live" ? "publish" : "draft",
-        categories: station.wpCategories,
-        featuredImageUrl: draft.featured_image_url ?? undefined,
-      });
-      pub = await saveRow(supabase, draft.id, stationSlug, {
-        status: "published",
-        wp_post_id: created.postId,
-        post_url: created.postUrl,
-        error: null,
-      });
+        status: target === "live" ? ("publish" as const) : ("draft" as const),
+        categories,
+      };
+
+      if (existingPostId) {
+        await editPost({ ...post, postId: existingPostId });
+        pub = await saveRow(supabase, draft.id, stationSlug, {
+          status: "published",
+          publish_mode: target,
+          error: null,
+        });
+      } else {
+        const created = await createPost({
+          ...post,
+          featuredImageUrl: draft.featured_image_url ?? undefined,
+        });
+        pub = await saveRow(supabase, draft.id, stationSlug, {
+          status: "published",
+          publish_mode: target,
+          wp_post_id: created.postId,
+          post_url: created.postUrl,
+          error: null,
+        });
+      }
     } catch (err) {
+      // Keep any existing post id so a retry updates that post instead of
+      // creating a duplicate.
       return saveRow(supabase, draft.id, stationSlug, {
         status: "failed",
         error: message(err),
@@ -149,8 +173,8 @@ export async function publishDraftToStation(
     }
   }
 
-  // WordPress confirmed. Facebook only in live mode, and only once.
-  if (mode === "live" && !pub.facebook_triggered_at) {
+  // WordPress confirmed the post is live. Facebook only then, and only once.
+  if (pub.publish_mode === "live" && !pub.facebook_triggered_at) {
     const fbError = await triggerFacebook(station, pub, title);
     pub = await saveRow(supabase, draft.id, stationSlug, {
       error: fbError,

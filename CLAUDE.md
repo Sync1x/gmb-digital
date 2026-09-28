@@ -14,7 +14,7 @@ Internal publishing dashboard for Green Mountain Broadcasters (six station WordP
 
 ## Status
 
-Phases 1–3 are built. The MainWP live test is still pending: see "Results" in `docs/mainwp-api.md` and confirm the create-post response fields.
+Phases 1–3 are built, plus WordPress categories and an Approve & publish flow. The MainWP live test is done: see "Results" in `docs/mainwp-api.md`.
 
 ## Where things live
 
@@ -26,14 +26,18 @@ Phases 1–3 are built. The MainWP live test is still pending: see "Results" in 
 - `src/app/login`, `src/app/auth/logout`: auth. `src/proxy.ts` (Next 16's renamed middleware) guards everything except `/login` and `/api/intake`.
 - `src/app/api/intake`: Make.com → drafts (`x-intake-secret`). `src/app/api/images/upload` handles image uploads. It's a route handler because server actions cap bodies at 1 MB.
 - Server actions: `src/app/actions.ts` (drafts), `image-actions.ts`, `publish-actions.ts`, `ai-actions.ts`. They return `ActionResult` (`{ ok, data } | { ok, error }`) instead of throwing, because production Next hides thrown messages.
+- `src/lib/wordpress.ts`: reads each station's categories from its public WP REST API (MainWP has no categories endpoint) and maps category names to that site's slugs for publishing.
 - `src/lib/mainwp.ts`: MainWP client. `publish.ts` holds the per-station publish logic (WordPress first, then Facebook). `publish-mode.ts` covers PUBLISH_MODE and MAINWP_TEST_SITE_ID. `image-search.ts` is the swappable provider interface (Brave today). `images.ts` handles download, sharp and Storage. `ai.ts` covers DeepSeek plus the AI_ENABLED check.
 - `supabase/migrations/`: SQL run by hand in the Supabase SQL editor, in order:
   - `0001` creates drafts
   - `0002` creates the `featured` bucket
   - `0003` creates publications
   - `0004` pins `set_updated_at()`'s search_path (Supabase security advisor)
-- Publishing runs from the browser: one `publishStationAction` per station in sequence, then `finalizeDraftAction`, which marks the draft published when every station is complete. A station is complete when its WP post is confirmed and, in live mode, Facebook has fired. Retrying reuses an existing WP post, so only the webhook is re-fired.
-- `PUBLISH_MODE` defaults to `draft` (WP drafts, no Facebook). Only `PUBLISH_MODE=live` publishes for real.
+  - `0005` adds `drafts.categories` (WordPress category names)
+- Publishing runs from the browser: one `publishStationAction(draftId, slug, target)` per station in sequence, then `finalizeDraftAction(draftId, target)`. `target` is `"draft"` (Save as WordPress draft: draft status becomes `ready`) or `"live"` (Approve & publish: becomes `published` once every station is live and Facebook has fired).
+- One WP post per station per draft: an existing WordPress draft is updated in place with MainWP's `edit` call (which also publishes it; `update-status` fails on drafts). An already-live post is left alone and only Facebook is retried. The featured image is only set at creation; `edit` can't change it.
+- Categories are sent to MainWP as that site's **slugs**, never names: the child site matches by slug first, and on Moo 92 / JJ Country a stray category named `"Local News"` (with quotes) owns the `local-news` slug.
+- `PUBLISH_MODE` is the master switch. It defaults to `draft`, which disables the live buttons (WP drafts only, no Facebook). Only `PUBLISH_MODE=live` allows Approve & publish.
 
 ## Build phases (do them in order, don't jump ahead)
 
@@ -44,8 +48,8 @@ Phases 1–3 are built. The MainWP live test is still pending: see "Results" in 
 ## Rules
 
 - Secrets live only in `.env.local` and Vercel env vars. Never commit them. The repo may become public.
-- Station config (name, site URL, MainWP site ID, Make webhook env var name, optional WP categories) lives in one file: `src/config/stations.ts`.
-- While building or testing, never publish to a live station: keep `PUBLISH_MODE=draft` and set `MAINWP_TEST_SITE_ID` to one test site. Never print API keys in the terminal or logs.
+- Station config (name, site URL, MainWP site ID, Make webhook env var name) lives in one file: `src/config/stations.ts`.
+- While building or testing, never publish to a live station: keep `PUBLISH_MODE=draft` locally and set `MAINWP_TEST_SITE_ID` to one test site. Never print API keys in the terminal or logs.
 - Tailwind's `dark:` variant is bound to a `.dark` class that is never applied (see `globals.css`), so shadcn's `dark:` classes stay inert.
 - Every draft keeps its source (sender / email / manual) and status (`new` → `ready` → `published` / `discarded`).
 - Publishing must never fire the Facebook webhook until WordPress has returned a successful response for that site.

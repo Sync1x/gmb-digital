@@ -10,8 +10,14 @@ type DraftUpdate = {
   title?: string | null;
   body?: string;
   stations?: string[];
+  categories?: string[];
   status?: DraftStatus;
 };
+
+function cleanCategories(names: string[]): string[] {
+  // Commas would split a name in MainWP's comma-separated category string.
+  return [...new Set(names.map((n) => n.trim()).filter((n) => n && !n.includes(",")))];
+}
 
 const VALID_SLUGS = new Set(stations.map((s) => s.slug));
 
@@ -25,6 +31,7 @@ export async function updateDraft(id: string, updates: DraftUpdate): Promise<Act
     const clean = {
       ...updates,
       ...(updates.stations ? { stations: updates.stations.filter((s) => VALID_SLUGS.has(s)) } : {}),
+      ...(updates.categories ? { categories: cleanCategories(updates.categories) } : {}),
     };
     const { error } = await supabase.from("drafts").update(clean).eq("id", id);
     if (error) throw new Error(error.message);
@@ -46,6 +53,7 @@ export async function saveManualDraft(input: {
   body: string;
   sender: string;
   stations: string[];
+  categories: string[];
   featuredImageUrl: string | null;
   status: DraftStatus;
 }): Promise<ActionResult<string>> {
@@ -57,6 +65,7 @@ export async function saveManualDraft(input: {
       title: input.title.trim() || null,
       body: input.body,
       stations: input.stations.filter((s) => VALID_SLUGS.has(s)),
+      categories: cleanCategories(input.categories),
       featured_image_url: input.featuredImageUrl,
       status: input.status,
       source_type: "manual" as const,

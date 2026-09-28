@@ -11,6 +11,8 @@ export type Draft = {
   source_sender: string | null;
   source_ref: string | null;
   stations: string[];
+  /** WordPress category names; each station gets the ones its site has. */
+  categories: string[];
   status: DraftStatus;
   featured_image_url: string | null;
 };
@@ -27,13 +29,20 @@ export type Publication = {
   status: PublicationStatus;
   error: string | null;
   facebook_triggered_at: string | null;
-  publish_mode: "draft" | "live";
+  /** How the WordPress post currently stands: "draft" or "live" (published). */
+  publish_mode: PublishTarget;
   created_at: string;
   updated_at: string;
 };
 
-/** Server-computed flags passed down to client components. */
+/** Where a publish run sends posts: WordPress drafts, or live (+ Facebook). */
+export type PublishTarget = "draft" | "live";
+
+/** Server-computed values passed down to client components. */
 export type DraftCardContext = {
   aiEnabled: boolean;
-  publishMode: "draft" | "live";
+  /** False when PUBLISH_MODE isn't "live": only WordPress drafts are allowed. */
+  liveEnabled: boolean;
+  /** Category names per station slug; null = that site couldn't be read. */
+  categoriesByStation: Record<string, string[] | null>;
 };

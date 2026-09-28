@@ -3,10 +3,16 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { SendIcon, Trash2Icon } from "lucide-react";
+import { FileTextIcon, SendIcon, Trash2Icon } from "lucide-react";
 import { setDraftStatus, updateDraft } from "@/app/actions";
-import { getPublishProblems } from "@/lib/publications";
-import type { Draft, DraftCardContext, DraftStatus, Publication } from "@/lib/types";
+import { getPublishProblems, isWordpressDraft } from "@/lib/publications";
+import type {
+  Draft,
+  DraftCardContext,
+  DraftStatus,
+  Publication,
+  PublishTarget,
+} from "@/lib/types";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { ImagePicker } from "@/components/image-picker";
 import { StationPicker } from "@/components/station-picker";
+import { CategoryPicker } from "@/components/category-picker";
 import { SuggestTitleButton } from "@/components/suggest-title-button";
 import { PublishDialog } from "@/components/publish-dialog";
 import { PublicationStatus } from "@/components/publication-status";
@@ -67,13 +74,15 @@ export function DraftCard({
   const [title, setTitle] = useState(draft.title ?? "");
   const [body, setBody] = useState(draft.body);
   const [selectedStations, setSelectedStations] = useState<string[]>(draft.stations);
+  const [categories, setCategories] = useState<string[]>(draft.categories ?? []);
   const [imageUrl, setImageUrl] = useState<string | null>(draft.featured_image_url);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
-  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
   const [isPending, startTransition] = useTransition();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const isFinal = draft.status === "published" || draft.status === "discarded";
+  const hasWordpressDrafts = publications.some(isWordpressDraft);
   const problems = getPublishProblems({
     title,
     body,
@@ -82,7 +91,7 @@ export function DraftCard({
   });
 
   function edits() {
-    return { title: title.trim() || null, body, stations: selectedStations };
+    return { title: title.trim() || null, body, stations: selectedStations, categories };
   }
 
   function run(label: string, fn: () => Promise<{ ok: boolean; error?: string }>, success: string) {
@@ -111,6 +120,11 @@ export function DraftCard({
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b py-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={STATUS_VARIANT[draft.status]}>{STATUS_LABEL[draft.status]}</Badge>
+          {hasWordpressDrafts && !isFinal && (
+            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
+              In WordPress as draft
+            </Badge>
+          )}
           <span className="text-sm text-muted-foreground">
             {draft.source_type === "newsletter" ? "Newsletter" : "Manual"}
             {draft.source_sender ? ` · ${draft.source_sender}` : ""}
@@ -178,6 +192,15 @@ export function DraftCard({
             disabled={isFinal}
             showSelectAll
           />
+
+          <CategoryPicker
+            id={`${draft.id}-categories`}
+            selectedStations={selectedStations}
+            categoriesByStation={context.categoriesByStation}
+            value={categories}
+            onChange={setCategories}
+            disabled={isFinal}
+          />
         </div>
 
         {publications.length > 0 && (
@@ -189,14 +212,20 @@ export function DraftCard({
       </CardContent>
 
       {!isFinal && (
-        <CardFooter className="flex flex-col items-stretch gap-2 border-t bg-muted/40 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <CardFooter className="flex flex-col items-stretch gap-3 border-t bg-muted/40 py-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            {problems.length > 0 ? `To publish, add ${problems.join(", ")}.` : "Ready to publish."}
+            {problems.length > 0
+              ? `To publish, add ${problems.join(", ")}.`
+              : !context.liveEnabled
+                ? "Live publishing is off here, so it can only be saved as a WordPress draft."
+                : hasWordpressDrafts
+                  ? "Drafts are waiting in WordPress. Approve to publish them."
+                  : "Ready to publish."}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               variant="ghost"
-              className="h-10 px-4 text-muted-foreground hover:text-destructive"
+              className="h-10 px-3 text-muted-foreground hover:text-destructive"
               onClick={() => setConfirmDiscardOpen(true)}
               disabled={isPending}
             >
@@ -212,41 +241,34 @@ export function DraftCard({
               {pendingAction === "save" && <Spinner />}
               Save
             </Button>
-            {draft.status === "new" && (
-              <Button
-                variant="outline"
-                className="h-10 px-4"
-                disabled={isPending}
-                onClick={() =>
-                  run(
-                    "ready",
-                    () => updateDraft(draft.id, { ...edits(), status: "ready" }),
-                    "Marked ready",
-                  )
-                }
-              >
-                {pendingAction === "ready" && <Spinner />}
-                Mark ready
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              className="h-10 px-4"
+              disabled={isPending || problems.length > 0}
+              onClick={() => setPublishTarget("draft")}
+            >
+              <FileTextIcon aria-hidden="true" />
+              {hasWordpressDrafts ? "Update WordPress draft" : "Save as WordPress draft"}
+            </Button>
             <Button
               className="h-10 px-5"
-              disabled={isPending || problems.length > 0}
-              onClick={() => setPublishOpen(true)}
+              disabled={isPending || problems.length > 0 || !context.liveEnabled}
+              onClick={() => setPublishTarget("live")}
             >
               <SendIcon aria-hidden="true" />
-              {context.publishMode === "draft" ? "Publish as draft" : "Publish"}
+              Approve &amp; publish
             </Button>
           </div>
         </CardFooter>
       )}
 
       <PublishDialog
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
+        open={publishTarget !== null}
+        onOpenChange={(open) => !open && setPublishTarget(null)}
         title={title}
         stationSlugs={selectedStations}
-        publishMode={context.publishMode}
+        target={publishTarget ?? "draft"}
+        publications={publications}
         prepare={prepareForPublish}
         onFinished={() => router.refresh()}
       />

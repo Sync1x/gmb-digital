@@ -6,6 +6,8 @@ type IntakeBody = {
   body?: string;
   sender?: string;
   stations?: string[];
+  /** WordPress category names, e.g. ["Local News"]. Optional. */
+  categories?: string[];
   source_ref?: string;
 };
 
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { title, body, sender, stations, source_ref } = payload;
+  const { title, body, sender, stations, categories, source_ref } = payload;
 
   if (!body || typeof body !== "string" || !body.trim()) {
     return NextResponse.json(
@@ -56,6 +58,9 @@ export async function POST(request: Request) {
       source_sender: sender.trim(),
       source_ref: source_ref ?? null,
       stations: Array.isArray(stations) ? stations : [],
+      categories: Array.isArray(categories)
+        ? categories.filter((c): c is string => typeof c === "string" && c.trim() !== "")
+        : [],
       status: "new",
     })
     .select("id")

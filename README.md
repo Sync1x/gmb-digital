@@ -5,26 +5,25 @@ The publishing dashboard for Green Mountain Broadcasters. It replaces the "20 br
 ## What it does
 
 1. **News comes in by itself.** A Make.com scenario reads the newsletter emails (Zoho), splits them into stories and sends each one to this app. Each story shows up in the **Queue** as a card.
-2. **You review each card.** Fix the title and text, click **Find image** (web image search) or **Upload image** (file, drag and drop, or paste), and tick the stations it should go to.
-3. **You click Publish.** For each ticked station, one at a time, the app:
-   - creates the post on that station's WordPress site through **MainWP**, with the featured image;
-   - waits for WordPress to confirm it;
-   - only then triggers that station's **Make.com Facebook scenario** with the post link.
+2. **You review each card.** Fix the title and text, click **Find image** (web image search) or **Upload image** (file, drag and drop, or paste), tick the stations, then pick **Categories** (e.g. Local News, NEK Events). The category list comes from the ticked stations' own sites; each station only gets the categories it has.
+3. **Two ways to send it:**
+   - **Save as WordPress draft**: creates a draft on each ticked site. Nothing goes public and Facebook isn't triggered. The card stays in the queue marked "In WordPress as draft".
+   - **Approve & publish**: for each ticked station, one at a time, the app publishes the post through **MainWP** (an existing WordPress draft is updated and published, so there are no duplicates), waits for WordPress to confirm it, and only then triggers that station's **Make.com Facebook scenario** with the post link.
 4. **Failures don't block the rest.** If one station fails, the others still go out. The failed one shows its error and a **Retry** button.
-5. **New post** is for stories that arrive some other way, like Messenger: paste the text, add an image, pick stations and publish.
+5. **New post** is for stories that arrive some other way, like Messenger: paste the text, add an image, pick stations and categories, then **Publish now**, **Save as WordPress draft**, or **Save to queue** to finish later.
 6. **History** lists everything published, with links to each station's post and whether Facebook was triggered.
 7. **Settings** shows whether MainWP is connected, every site MainWP manages (with its ID), and which stations are set up.
 
 Optional: **Suggest title** asks an AI (DeepSeek) for three plain, factual headlines. It's off unless you turn it on.
 
-### Draft mode vs live mode
+### The live-publishing switch
 
-The `PUBLISH_MODE` setting controls whether anything goes public:
+`PUBLISH_MODE` is a master switch over the buttons above:
 
-- `draft` (the default): posts are created as **WordPress drafts** and **Facebook is never triggered**. A yellow "Draft mode" badge shows at the top of every page.
-- `live`: posts go public and Facebook is triggered.
+- `live`: **Approve & publish** and **Publish now** work. Set this in Vercel for the real app.
+- `draft` (the default): those buttons are turned off, so everything can only be saved as a **WordPress draft** and **Facebook is never triggered**. A yellow "Drafts only" badge shows at the top of every page.
 
-Use draft mode whenever you're testing or changing something.
+Keep `draft` on your own computer and whenever you're testing or changing something.
 
 ## Accounts you need
 
@@ -87,16 +86,17 @@ The six stations are already mapped in `src/config/stations.ts` (Moo 92 → 6, M
 
 - **Intake scenario:** send an HTTP POST to `https://<your-app>/api/intake`.
   - Header: `x-intake-secret: <INTAKE_SECRET>`
-  - JSON body: `{ "title": "...", "body": "...", "sender": "Jeff", "stations": ["magic-97-7"], "source_ref": "<email id>" }`
-  - `body` and `sender` are required. `stations` uses the slugs from `stations.ts`.
+  - JSON body: `{ "title": "...", "body": "...", "sender": "Jeff", "stations": ["magic-97-7"], "categories": ["Local News"], "source_ref": "<email id>" }`
+  - `body` and `sender` are required. `stations` uses the slugs from `stations.ts`. `categories` (optional) uses WordPress category names.
+  - Stories from Make always land in the queue as drafts in this app. Nothing reaches WordPress until someone approves it.
 - **Facebook scenarios:** one per station, each starting with a **Custom webhook**. Put each webhook URL in the matching `MAKE_WEBHOOK_*` variable.
   - The app sends `{ "post_id", "post_url", "title", "station", "station_name" }`.
-  - It only sends this in live mode, and only after WordPress has confirmed the post.
+  - It only sends this when a post goes live, and only after WordPress has confirmed it.
 
 ### 7. Test in draft mode, then go live
 
 1. Keep `PUBLISH_MODE=draft` and set `MAINWP_TEST_SITE_ID` to one test site's ID. Every post then goes to that one site, as a draft.
-2. Publish a story. Check the draft and its featured image in that site's WordPress admin, then delete it.
+2. Click **Save as WordPress draft** on a story. Check the draft, its categories and featured image in that site's WordPress admin, then delete it.
 3. When you're happy:
    - clear `MAINWP_TEST_SITE_ID`
    - set `PUBLISH_MODE=live` in Vercel

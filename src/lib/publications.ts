@@ -1,8 +1,8 @@
-import type { Publication } from "@/lib/types";
+import type { Publication, PublishTarget } from "@/lib/types";
 
 /**
- * A station is done when WordPress accepted the post and, in live mode, its
- * Facebook webhook fired. In draft mode the webhook is skipped on purpose.
+ * A station is done when WordPress accepted the post and, if it's live, its
+ * Facebook webhook fired. WordPress drafts skip Facebook on purpose.
  */
 export function isPublicationComplete(p: Publication): boolean {
   return (
@@ -10,6 +10,16 @@ export function isPublicationComplete(p: Publication): boolean {
     !p.error &&
     (p.publish_mode === "draft" || p.facebook_triggered_at !== null)
   );
+}
+
+/** Done for this run: a "live" run also needs the post to actually be live. */
+export function isDoneFor(p: Publication, target: PublishTarget): boolean {
+  return isPublicationComplete(p) && (target === "draft" || p.publish_mode === "live");
+}
+
+/** True when this station already has a WordPress draft waiting for approval. */
+export function isWordpressDraft(p: Publication): boolean {
+  return p.status === "published" && p.publish_mode === "draft";
 }
 
 /** What's still missing before a draft can be published. Empty = ready. */
