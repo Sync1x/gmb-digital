@@ -14,7 +14,7 @@ Internal publishing dashboard for Green Mountain Broadcasters (six station WordP
 
 ## Status
 
-Phases 1–3 are built, plus WordPress categories and an Approve & publish flow. The MainWP live test is done: see "Results" in `docs/mainwp-api.md`.
+Phases 1–3 are built, plus WordPress categories, an Approve & publish flow and scheduled publishing. The MainWP live test is done: see "Results" in `docs/mainwp-api.md`.
 
 ## Where things live
 
@@ -34,9 +34,17 @@ Phases 1–3 are built, plus WordPress categories and an Approve & publish flow.
   - `0003` creates publications
   - `0004` pins `set_updated_at()`'s search_path (Supabase security advisor)
   - `0005` adds `drafts.categories` (WordPress category names)
+  - `0006` scheduled publishing: `drafts.scheduled_for` / `publish_attempts` / `last_publish_error` / `publishing_started_at` / `edited_after_scheduling`, the `scheduled`, `publishing` and `failed` statuses, the `scheduler_runs` log, and the `claim_due_drafts()`, `recover_stuck_drafts()`, `record_scheduler_run()` functions (service role only)
+  - `0007` enables pg_cron + pg_net and schedules the every-5-minutes job; the URL and secret come from Supabase Vault (`app_url`, `cron_secret`), never from SQL
 - Publishing runs from the browser: one `publishStationAction(draftId, slug, target)` per station in sequence, then `finalizeDraftAction(draftId, target)`. `target` is `"draft"` (Save as WordPress draft: draft status becomes `ready`) or `"live"` (Approve & publish: becomes `published` once every station is live and Facebook has fired).
 - One WP post per station per draft: an existing WordPress draft is updated in place with MainWP's `edit` call (which also publishes it; `update-status` fails on drafts). An already-live post is left alone and only Facebook is retried. The featured image is only set at creation; `edit` can't change it.
 - Categories are sent to MainWP as that site's **slugs**, never names: the child site matches by slug first, and on Moo 92 / JJ Country a stray category named `"Local News"` (with quotes) owns the `local-news` slug.
+- Scheduled publishing (times are stored in UTC, shown and picked in America/New_York; `src/lib/schedule-time.ts` holds all of that, including DST gaps and repeats):
+  - `schedule-actions.ts` sets/clears a schedule (`scheduleDraftAction`, `unscheduleDraftAction`); the time must be at least 5 minutes out and the draft passes the same readiness rules as publishing. Unschedule is also the first step of Publish now / Retry now, so the runner can never grab a draft that is being published by hand.
+  - `POST /api/cron/publish-due` (`CRON_SECRET` bearer token; GET too, because Vercel Cron only sends GET; excluded from the login proxy) calls `runDueDrafts()` in `src/lib/scheduler.ts`. It claims due drafts with one atomic SQL `UPDATE ... RETURNING` (`claim_due_drafts()`), then publishes each through the **same** `publishDraftToStation()` + `finalizeDraft()` the browser uses, respecting `PUBLISH_MODE` (draft mode saves WordPress drafts and the draft ends as `ready`, not `published`).
+  - A failed run bumps `publish_attempts`, stores `last_publish_error` and reschedules 5 minutes later; the 3rd failure sets `failed`. `publishing` for over 15 minutes counts as a failed attempt and goes back to `scheduled`. Drafts claimed more than 15 minutes after their time are still published and counted as `late`.
+  - The Supabase job (0007) is the scheduler. `docs/vercel-cron.json` is the Vercel Pro alternative (not active: Hobby rejects sub-daily crons and would fail the deploy). `/settings` has the Scheduler card (health, recent runs, Run now); failed scheduled posts show as red alerts at the top of the queue.
+  - While a draft is `publishing` it is read-only (the card and `updateDraft` refuse edits). Editing a `scheduled` draft keeps it scheduled and sets `edited_after_scheduling`.
 - `PUBLISH_MODE` is the master switch. It defaults to `draft`, which disables the live buttons (WP drafts only, no Facebook). Only `PUBLISH_MODE=live` allows Approve & publish.
 
 ## Build phases (do them in order, don't jump ahead)
@@ -51,7 +59,7 @@ Phases 1–3 are built, plus WordPress categories and an Approve & publish flow.
 - Station config (name, site URL, MainWP site ID, Make webhook env var name) lives in one file: `src/config/stations.ts`.
 - While building or testing, never publish to a live station: keep `PUBLISH_MODE=draft` locally and set `MAINWP_TEST_SITE_ID` to one test site. Never print API keys in the terminal or logs.
 - Tailwind's `dark:` variant is bound to a `.dark` class that is never applied (see `globals.css`), so shadcn's `dark:` classes stay inert.
-- Every draft keeps its source (sender / email / manual) and status (`new` → `ready` → `published` / `discarded`).
+- Every draft keeps its source (sender / email / manual) and status (`new` → `ready` → `scheduled` → `publishing` → `published`, or `failed` / `discarded`).
 - Publishing must never fire the Facebook webhook until WordPress has returned a successful response for that site.
 - AI steps (splitting, titles, image queries) must be optional and switchable off, so the tool still works without AI.
 - Keep the UI plain and fast: one queue page, big clear buttons, works on a laptop screen.
