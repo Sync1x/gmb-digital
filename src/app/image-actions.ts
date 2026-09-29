@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { searchImages, type ImageResult } from "@/lib/image-search";
 import { deleteFeaturedImage, downloadImage, storeFeaturedImage } from "@/lib/images";
+import { markEditedIfScheduled } from "@/lib/scheduling";
 import type { ActionResult } from "@/lib/action-result";
 
 function message(err: unknown) {
@@ -40,6 +41,7 @@ export async function pickImageAction(
         .update({ featured_image_url: publicUrl })
         .eq("id", draftId);
       if (error) throw new Error(`Image saved but couldn't update the draft: ${error.message}`);
+      await markEditedIfScheduled(supabase, draftId);
       revalidatePath("/");
     }
     return { ok: true, data: publicUrl };
@@ -60,6 +62,7 @@ export async function removeImageAction(
         .update({ featured_image_url: null })
         .eq("id", draftId);
       if (error) throw new Error(error.message);
+      await markEditedIfScheduled(supabase, draftId);
       revalidatePath("/");
     }
     // WordPress keeps its own copy, so removing ours is safe. Best-effort.

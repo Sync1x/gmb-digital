@@ -3,8 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileTextIcon, SendIcon } from "lucide-react";
+import { CalendarClockIcon, FileTextIcon, SendIcon } from "lucide-react";
 import { saveManualDraft } from "@/app/actions";
+import { scheduleDraftAction } from "@/app/schedule-actions";
+import { formatWhen } from "@/lib/schedule-time";
 import { getPublishProblems } from "@/lib/publications";
 import type { DraftCardContext, PublishTarget } from "@/lib/types";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -18,6 +20,7 @@ import { StationPicker } from "@/components/station-picker";
 import { CategoryPicker } from "@/components/category-picker";
 import { SuggestTitleButton } from "@/components/suggest-title-button";
 import { PublishDialog } from "@/components/publish-dialog";
+import { ScheduleDialog } from "@/components/schedule-dialog";
 
 export function ComposerForm({ context }: { context: DraftCardContext }) {
   const router = useRouter();
@@ -29,6 +32,7 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isSaving, startSave] = useTransition();
 
   const problems = getPublishProblems({
@@ -55,6 +59,17 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
     }
     setSavedId(result.data);
     return result.data;
+  }
+
+  /** Saves the post, then schedules it. Returns an error message or null. */
+  async function confirmSchedule(scheduledForIso: string): Promise<string | null> {
+    const id = await save("ready");
+    if (!id) return "Couldn't save the post. Check the message above and try again.";
+    const result = await scheduleDraftAction(id, scheduledForIso);
+    if (!result.ok) return result.error;
+    toast.success(`Scheduled for ${formatWhen(new Date(result.data.scheduledFor))} ET`);
+    router.push("/?status=scheduled");
+    return null;
   }
 
   function handleSaveDraft() {
@@ -173,6 +188,15 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
             Save as WordPress draft
           </Button>
           <Button
+            variant="outline"
+            className="h-10 px-4"
+            onClick={() => setScheduleOpen(true)}
+            disabled={isSaving || problems.length > 0}
+          >
+            <CalendarClockIcon aria-hidden="true" />
+            Schedule
+          </Button>
+          <Button
             className="h-10 px-5"
             onClick={() => setPublishTarget("live")}
             disabled={isSaving || problems.length > 0 || !context.liveEnabled}
@@ -182,6 +206,15 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
           </Button>
         </div>
       </CardFooter>
+
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        title={title}
+        stationSlugs={selectedStations}
+        liveEnabled={context.liveEnabled}
+        onConfirm={confirmSchedule}
+      />
 
       <PublishDialog
         open={publishTarget !== null}

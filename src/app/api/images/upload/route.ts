@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { storeFeaturedImage } from "@/lib/images";
+import { markEditedIfScheduled } from "@/lib/scheduling";
 
 // Uploads go through a route handler, not a server action, because server
 // actions cap request bodies at 1 MB. The browser pre-shrinks big photos so
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+      await markEditedIfScheduled(supabase, draftId);
       revalidatePath("/");
     }
 

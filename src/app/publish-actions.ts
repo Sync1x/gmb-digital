@@ -38,6 +38,12 @@ export async function publishStationAction(
     const draft = data as Draft;
 
     if (draft.status === "discarded") throw new Error("This draft was discarded.");
+    if (draft.status === "publishing") {
+      throw new Error("The scheduler is publishing this draft right now.");
+    }
+    if (draft.status === "scheduled") {
+      throw new Error("This draft is scheduled. Unschedule it or use Publish now.");
+    }
     const problems = getPublishProblems({
       title: draft.title,
       body: draft.body,

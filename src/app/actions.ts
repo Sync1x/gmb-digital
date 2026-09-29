@@ -4,14 +4,15 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { stations } from "@/config/stations";
 import type { ActionResult } from "@/lib/action-result";
-import type { DraftStatus } from "@/lib/types";
+import type { Draft } from "@/lib/types";
 
 type DraftUpdate = {
   title?: string | null;
   body?: string;
   stations?: string[];
   categories?: string[];
-  status?: DraftStatus;
+  /** Only manual states: scheduling goes through schedule-actions.ts. */
+  status?: "new" | "ready" | "discarded";
 };
 
 function cleanCategories(names: string[]): string[] {
@@ -21,6 +22,10 @@ function cleanCategories(names: string[]): string[] {
 
 const VALID_SLUGS = new Set(stations.map((s) => s.slug));
 
+function sameList(a: string[], b: string[]) {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
 }
@@ -28,11 +33,39 @@ function message(err: unknown) {
 export async function updateDraft(id: string, updates: DraftUpdate): Promise<ActionResult> {
   try {
     const { supabase } = await requireUser();
-    const clean = {
+    const clean: Record<string, unknown> = {
       ...updates,
       ...(updates.stations ? { stations: updates.stations.filter((s) => VALID_SLUGS.has(s)) } : {}),
       ...(updates.categories ? { categories: cleanCategories(updates.categories) } : {}),
     };
+
+    // The scheduler owns a draft while it publishes it: hands off.
+    const { data: current } = await supabase
+      .from("drafts")
+      .select("status, title, body, stations, categories")
+      .eq("id", id)
+      .single();
+    const before = current as Pick<
+      Draft,
+      "status" | "title" | "body" | "stations" | "categories"
+    > | null;
+    if (before?.status === "publishing") {
+      throw new Error("This draft is being published right now. Try again in a minute.");
+    }
+
+    // Editing a scheduled draft keeps it scheduled, but the card notes the change.
+    if (before?.status === "scheduled" && updates.status === "discarded") {
+      Object.assign(clean, { scheduled_for: null, edited_after_scheduling: false });
+    } else if (before?.status === "scheduled") {
+      const changed =
+        (clean.title !== undefined && clean.title !== before.title) ||
+        (clean.body !== undefined && clean.body !== before.body) ||
+        (clean.stations !== undefined && !sameList(clean.stations as string[], before.stations)) ||
+        (clean.categories !== undefined &&
+          !sameList(clean.categories as string[], before.categories ?? []));
+      if (changed) clean.edited_after_scheduling = true;
+    }
+
     const { error } = await supabase.from("drafts").update(clean).eq("id", id);
     if (error) throw new Error(error.message);
     revalidatePath("/", "layout");
@@ -42,7 +75,7 @@ export async function updateDraft(id: string, updates: DraftUpdate): Promise<Act
   }
 }
 
-export async function setDraftStatus(id: string, status: DraftStatus) {
+export async function setDraftStatus(id: string, status: "new" | "ready" | "discarded") {
   return updateDraft(id, { status });
 }
 
@@ -55,7 +88,7 @@ export async function saveManualDraft(input: {
   stations: string[];
   categories: string[];
   featuredImageUrl: string | null;
-  status: DraftStatus;
+  status: "new" | "ready";
 }): Promise<ActionResult<string>> {
   try {
     const { supabase, user } = await requireUser();
