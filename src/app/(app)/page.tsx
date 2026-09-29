@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlusIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DraftCard } from "@/components/draft-card";
+import { FailedScheduleAlerts } from "@/components/failed-schedule-alerts";
 import { StatusFilter } from "@/components/status-filter";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -47,10 +48,17 @@ export default async function QueuePage({
     query = query.neq("status", "discarded").order("created_at", { ascending: false });
   }
 
-  const [{ data, error }, { data: statusRows }] = await Promise.all([
+  const [{ data, error }, { data: statusRows }, { data: failedRows }] = await Promise.all([
     query,
     supabase.from("drafts").select("status"),
+    // Scheduled posts that ran out of retries always show at the top, whatever the filter.
+    supabase
+      .from("drafts")
+      .select("*, publications(*)")
+      .eq("status", "failed")
+      .order("updated_at", { ascending: false }),
   ]);
+  const failed = (failedRows ?? []) as (Draft & { publications: Publication[] })[];
   const drafts = (data ?? []) as (Draft & { publications: Publication[] })[];
   const counts: Partial<Record<DraftStatus, number>> = {};
   for (const row of (statusRows ?? []) as { status: DraftStatus }[]) {
@@ -88,6 +96,10 @@ export default async function QueuePage({
           </Link>
         }
       />
+
+      {status !== "failed" && (
+        <FailedScheduleAlerts drafts={failed} liveEnabled={context.liveEnabled} />
+      )}
 
       <StatusFilter active={status ?? "all"} counts={counts} />
 

@@ -5,6 +5,7 @@ import { isAiEnabled } from "@/lib/ai";
 import { isImageSearchConfigured } from "@/lib/image-search";
 import { TestConnectionButton } from "@/components/test-connection-button";
 import { PageHeader } from "@/components/page-header";
+import { SchedulerCard } from "@/components/scheduler-card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,6 +147,8 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <SchedulerCard />
 
       <Card>
         <CardHeader>

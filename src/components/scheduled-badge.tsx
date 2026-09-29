@@ -29,3 +29,11 @@ export function ScheduledBadge({ iso }: { iso: string }) {
     </Badge>
   );
 }
+
+/** "3m ago" / "in 2h", kept fresh. "just now" inside the first minute. */
+export function RelativeTime({ iso }: { iso: string }) {
+  const now = useNow();
+  if (!now) return null;
+  const relative = formatRelative(new Date(iso), now);
+  return <>{relative === "now" ? "just now" : relative}</>;
+}
