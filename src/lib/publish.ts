@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStationBySlug, isConfigured, type Station } from "@/config/stations";
 import { createPost, editPost } from "@/lib/mainwp";
 import { getTestSiteId } from "@/lib/publish-mode";
+import { isDoneFor } from "@/lib/publications";
 import { textToHtml } from "@/lib/text-to-html";
 import { categorySlugsForStation } from "@/lib/wordpress";
 import type { Draft, Publication, PublishTarget } from "@/lib/types";
@@ -185,4 +186,51 @@ export async function publishDraftToStation(
   }
 
   return pub;
+}
+
+/**
+ * After a run: once every station is done, a live run marks the draft
+ * published; a WordPress-draft run marks it ready (waiting for approval).
+ * Shared by the browser flow and the scheduler, so both end the same way.
+ */
+export async function finalizeDraft(
+  supabase: SupabaseClient,
+  draftId: string,
+  target: PublishTarget
+): Promise<{ done: boolean }> {
+  const [{ data: draft, error: draftError }, { data: pubs, error: pubError }] = await Promise.all([
+    supabase.from("drafts").select("*").eq("id", draftId).single(),
+    supabase.from("publications").select("*").eq("draft_id", draftId),
+  ]);
+  if (draftError || !draft) throw new Error(draftError?.message ?? "Draft not found.");
+  if (pubError) throw new Error(pubError.message);
+
+  const d = draft as Draft;
+  const byStation = new Map((pubs as Publication[]).map((p) => [p.station_slug, p]));
+  const allDone =
+    d.stations.length > 0 &&
+    d.stations.every((slug) => {
+      const p = byStation.get(slug);
+      return p ? isDoneFor(p, target) : false;
+    });
+
+  const nextStatus = target === "live" ? "published" : "ready";
+  if (allDone && d.status !== nextStatus && d.status !== "published") {
+    // Only from the states a publish run starts in ("publishing" is the
+    // scheduler's), so a draft scheduled or discarded meanwhile isn't flipped.
+    const { error } = await supabase
+      .from("drafts")
+      .update({
+        status: nextStatus,
+        scheduled_for: null,
+        publish_attempts: 0,
+        last_publish_error: null,
+        publishing_started_at: null,
+        edited_after_scheduling: false,
+      })
+      .eq("id", draftId)
+      .in("status", ["new", "ready", "publishing"]);
+    if (error) throw new Error(error.message);
+  }
+  return { done: allDone };
 }

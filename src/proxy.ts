@@ -13,8 +13,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico, sitemap.xml, robots.txt (metadata files)
      * - api routes with their own auth (intake is protected by its own
-     *   x-intake-secret header, not the user session)
+     *   x-intake-secret header, cron by its CRON_SECRET bearer token; neither
+     *   has a user session)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api/intake|sitemap.xml|robots.txt).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/intake|api/cron|sitemap.xml|robots.txt).*)",
   ],
 };

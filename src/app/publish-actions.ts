@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { publishDraftToStation } from "@/lib/publish";
+import { finalizeDraft, publishDraftToStation } from "@/lib/publish";
 import { allowedTarget } from "@/lib/publish-mode";
-import { getPublishProblems, isDoneFor } from "@/lib/publications";
+import { getPublishProblems } from "@/lib/publications";
 import type { ActionResult } from "@/lib/action-result";
 import type { Draft, Publication, PublishTarget } from "@/lib/types";
 
@@ -72,34 +72,9 @@ export async function finalizeDraftAction(
 ): Promise<ActionResult<{ done: boolean }>> {
   try {
     const { supabase } = await requireUser();
-    const [{ data: draft, error: draftError }, { data: pubs, error: pubError }] =
-      await Promise.all([
-        supabase.from("drafts").select("*").eq("id", draftId).single(),
-        supabase.from("publications").select("*").eq("draft_id", draftId),
-      ]);
-    if (draftError || !draft) throw new Error(draftError?.message ?? "Draft not found.");
-    if (pubError) throw new Error(pubError.message);
-
-    const d = draft as Draft;
-    const byStation = new Map((pubs as Publication[]).map((p) => [p.station_slug, p]));
-    const allDone =
-      d.stations.length > 0 &&
-      d.stations.every((slug) => {
-        const p = byStation.get(slug);
-        return p ? isDoneFor(p, target) : false;
-      });
-
-    const nextStatus = target === "live" ? "published" : "ready";
-    if (allDone && d.status !== nextStatus && d.status !== "published") {
-      const { error } = await supabase
-        .from("drafts")
-        .update({ status: nextStatus })
-        .eq("id", draftId);
-      if (error) throw new Error(error.message);
-    }
-
+    const result = await finalizeDraft(supabase, draftId, target);
     revalidatePath("/", "layout");
-    return { ok: true, data: { done: allDone } };
+    return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: message(err) };
   }
