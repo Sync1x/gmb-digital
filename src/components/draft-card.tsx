@@ -231,6 +231,7 @@ export function DraftCard({
               imageUrl={imageUrl}
               onChange={setImageUrl}
               defaultQuery={title}
+              stationSlugs={selectedStations}
               disabled={locked}
             />
           </div>

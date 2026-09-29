@@ -140,6 +140,7 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
               imageUrl={imageUrl}
               onChange={setImageUrl}
               defaultQuery={title}
+              stationSlugs={selectedStations}
             />
           </div>
 

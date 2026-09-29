@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ImageIcon, SearchIcon, UploadIcon, XIcon } from "lucide-react";
+import { ImageIcon, ImagesIcon, SearchIcon, UploadIcon, XIcon } from "lucide-react";
 import { pickImageAction, removeImageAction, searchImagesAction } from "@/app/image-actions";
 import type { ImageResult } from "@/lib/image-search";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { WpMediaDialog } from "@/components/wp-media-dialog";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,8 @@ type Props = {
   onChange: (url: string | null) => void;
   /** Prefills the search box (usually the title). */
   defaultQuery: string;
+  /** Ticked stations; the WordPress library opens on the first one. */
+  stationSlugs?: string[];
   disabled?: boolean;
 };
 
@@ -85,15 +88,28 @@ function useImageUpload(draftId: string | null, onPicked: (url: string) => void)
   return { upload, isUploading };
 }
 
-export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disabled }: Props) {
+export function ImagePicker({
+  draftId,
+  imageUrl,
+  onChange,
+  defaultQuery,
+  stationSlugs = [],
+  disabled,
+}: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchSession, setSearchSession] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [mediaSession, setMediaSession] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   function openSearch() {
     setSearchSession((n) => n + 1);
     setSearchOpen(true);
+  }
+  function openMedia() {
+    setMediaSession((n) => n + 1);
+    setMediaOpen(true);
   }
   const [isRemoving, startRemove] = useTransition();
 
@@ -114,6 +130,7 @@ export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disable
     onChange(url);
     setSearchOpen(false);
     setUploadOpen(false);
+    setMediaOpen(false);
     toast.success("Image added");
   }
 
@@ -191,6 +208,10 @@ export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disable
             <UploadIcon />
             Upload image
           </Button>
+          <Button variant="outline" className="h-10 px-4" onClick={openMedia}>
+            <ImagesIcon />
+            WordPress library
+          </Button>
           {imageUrl && (
             <Button
               variant="ghost"
@@ -211,6 +232,14 @@ export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disable
         onOpenChange={setSearchOpen}
         defaultQuery={defaultQuery}
         draftId={draftId}
+        onPicked={handlePicked}
+      />
+      <WpMediaDialog
+        key={`media-${mediaSession}`}
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        draftId={draftId}
+        stationSlugs={stationSlugs}
         onPicked={handlePicked}
       />
       <UploadDialog

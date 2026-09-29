@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { searchImages, type ImageResult } from "@/lib/image-search";
 import { deleteFeaturedImage, downloadImage, storeFeaturedImage } from "@/lib/images";
 import { markEditedIfScheduled } from "@/lib/scheduling";
+import { getStationMedia, type WpMediaPage } from "@/lib/wordpress";
+import { stations } from "@/config/stations";
 import type { ActionResult } from "@/lib/action-result";
 
 function message(err: unknown) {
@@ -19,6 +21,22 @@ export async function searchImagesAction(query: string): Promise<ActionResult<Im
     return { ok: true, data: await searchImages(q, 8) };
   } catch (err) {
     return { ok: false, error: message(err) };
+  }
+}
+
+/** One page of a station's WordPress media library, optionally searched. */
+export async function listStationMediaAction(
+  stationSlug: string,
+  query: string,
+  page: number
+): Promise<ActionResult<WpMediaPage>> {
+  try {
+    await requireUser();
+    const station = stations.find((s) => s.slug === stationSlug);
+    if (!station) return { ok: false, error: "Unknown station." };
+    return { ok: true, data: await getStationMedia(station, { search: query, page }) };
+  } catch (err) {
+    return { ok: false, error: `Couldn't load the media library: ${message(err)}` };
   }
 }
 

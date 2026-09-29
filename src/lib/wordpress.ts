@@ -79,3 +79,90 @@ export async function categorySlugsForStation(
   const byName = new Map(available.map((c) => [c.name.toLowerCase(), c.slug]));
   return names.map((name) => byName.get(name.toLowerCase())).filter((s): s is string => !!s);
 }
+
+export type WpMediaItem = {
+  id: number;
+  title: string;
+  /** Small preview for the grid. */
+  thumbUrl: string;
+  /** The original upload; the app downloads and resizes it when picked. */
+  fullUrl: string;
+  width: number | null;
+  height: number | null;
+};
+
+export type WpMediaPage = { items: WpMediaItem[]; page: number; totalPages: number; total: number };
+
+const MEDIA_PAGE_SIZE = 24;
+
+type RawMedia = {
+  id?: unknown;
+  title?: { rendered?: unknown };
+  source_url?: unknown;
+  media_details?: {
+    width?: unknown;
+    height?: unknown;
+    sizes?: Record<string, { source_url?: unknown } | undefined>;
+  };
+};
+
+/**
+ * One page of a station site's media library (images only, newest first),
+ * optionally filtered by a search term. Read from the site's public REST API.
+ */
+export async function getStationMedia(
+  station: Station,
+  opts: { search?: string; page?: number } = {}
+): Promise<WpMediaPage> {
+  const base = station.siteUrl.replace(/\/+$/, "");
+  const page = Math.max(1, Math.floor(opts.page ?? 1));
+  const params = new URLSearchParams({
+    per_page: String(MEDIA_PAGE_SIZE),
+    page: String(page),
+    media_type: "image",
+    orderby: "date",
+    order: "desc",
+    _fields: "id,title,source_url,media_details",
+  });
+  const search = opts.search?.trim();
+  if (search) params.set("search", search);
+
+  const res = await fetch(`${base}/wp-json/wp/v2/media?${params}`, {
+    headers: { Accept: "application/json" },
+    next: { revalidate: 60 },
+    signal: AbortSignal.timeout(15_000),
+  });
+  // Asking for a page past the end is a 400 on WordPress; treat it as empty.
+  if (res.status === 400) return { items: [], page, totalPages: page - 1, total: 0 };
+  if (!res.ok) throw new Error(`${station.name}'s site returned HTTP ${res.status}`);
+  const data: unknown = await res.json();
+  if (!Array.isArray(data)) throw new Error(`${station.name}'s site sent an unexpected response`);
+
+  const num = (v: unknown) => (typeof v === "number" ? v : null);
+  const items = (data as RawMedia[])
+    .map((m): WpMediaItem | null => {
+      const fullUrl = typeof m.source_url === "string" ? m.source_url : "";
+      if (typeof m.id !== "number" || !fullUrl) return null;
+      const sizes = m.media_details?.sizes ?? {};
+      const thumb = [sizes.medium, sizes.thumbnail]
+        .map((s) => (typeof s?.source_url === "string" ? s.source_url : null))
+        .find(Boolean);
+      const title = decodeEntities(String(m.title?.rendered ?? "")).trim();
+      return {
+        id: m.id,
+        title: title || `Image ${m.id}`,
+        thumbUrl: thumb ?? fullUrl,
+        fullUrl,
+        width: num(m.media_details?.width),
+        height: num(m.media_details?.height),
+      };
+    })
+    .filter((m): m is WpMediaItem => m !== null);
+
+  return {
+    items,
+    page,
+    totalPages: Number(res.headers.get("x-wp-totalpages") ?? 1) || 1,
+    total: Number(res.headers.get("x-wp-total") ?? items.length) || items.length,
+  };
+}
