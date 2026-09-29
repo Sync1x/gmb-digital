@@ -52,10 +52,44 @@ async function shrinkIfLarge(file: File): Promise<Blob> {
   }
 }
 
+/** Uploads one file through /api/images/upload; shared by the drop zone and the dialog. */
+function useImageUpload(draftId: string | null, onPicked: (url: string) => void) {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const upload = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) {
+        toast.error("That file isn't an image.");
+        return;
+      }
+      setIsUploading(true);
+      try {
+        const body = new FormData();
+        body.append("file", await shrinkIfLarge(file), file.name || "pasted.jpg");
+        if (draftId) body.append("draftId", draftId);
+        const res = await fetch("/api/images/upload", { method: "POST", body });
+        const isJson = res.headers.get("content-type")?.includes("application/json");
+        if (!isJson) throw new Error("Your session expired. Reload the page and sign in again.");
+        const json = (await res.json()) as { url?: string; error?: string };
+        if (!res.ok || !json.url) throw new Error(json.error ?? `Upload failed (HTTP ${res.status}).`);
+        onPicked(json.url);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Upload failed");
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [draftId, onPicked]
+  );
+
+  return { upload, isUploading };
+}
+
 export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disabled }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchSession, setSearchSession] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   function openSearch() {
     setSearchSession((n) => n + 1);
@@ -83,18 +117,69 @@ export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disable
     toast.success("Image added");
   }
 
+  const { upload, isUploading } = useImageUpload(draftId, handlePicked);
+  const canDrop = !disabled && !isUploading;
+
   return (
     <div className="flex flex-col gap-3">
-      {imageUrl ? (
-        <div className="relative overflow-hidden rounded-lg border bg-muted">
-          <img src={imageUrl} alt="Featured image" className="aspect-video w-full object-cover" />
-        </div>
-      ) : (
-        <div className="flex aspect-[3/1] items-center justify-center gap-2 rounded-lg border border-dashed text-sm text-muted-foreground">
-          <ImageIcon className="size-4" />
-          No image yet
-        </div>
-      )}
+      {/* Drop an image anywhere on this area: no need to open the upload dialog first. */}
+      <div
+        className="relative"
+        onDragOver={(e) => {
+          if (!canDrop || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!canDrop) return;
+          e.preventDefault();
+          setIsDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) void upload(file);
+        }}
+      >
+        {imageUrl ? (
+          <div className="overflow-hidden rounded-lg border bg-muted">
+            <img
+              src={imageUrl}
+              alt="Featured image"
+              draggable={false}
+              className="aspect-video w-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="flex aspect-[3/1] flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <ImageIcon className="size-4" />
+              No image yet
+            </span>
+            {!disabled && <span className="text-xs">Drag an image here to add it</span>}
+          </div>
+        )}
+        {(isDragging || isUploading) && (
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed text-sm font-medium",
+              isDragging ? "border-primary bg-background/90" : "border-transparent bg-background/80"
+            )}
+          >
+            {isUploading ? (
+              <>
+                <Spinner className="size-5" />
+                Converting and uploading…
+              </>
+            ) : (
+              <>
+                <UploadIcon className="size-5" />
+                {imageUrl ? "Drop to replace the image" : "Drop to add the image"}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {!disabled && (
         <div className="flex flex-wrap gap-2">
@@ -131,8 +216,8 @@ export function ImagePicker({ draftId, imageUrl, onChange, defaultQuery, disable
       <UploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
-        draftId={draftId}
-        onPicked={handlePicked}
+        upload={upload}
+        isUploading={isUploading}
       />
     </div>
   );
@@ -272,43 +357,16 @@ function SearchDialog({
 function UploadDialog({
   open,
   onOpenChange,
-  draftId,
-  onPicked,
+  upload,
+  isUploading,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  draftId: string | null;
-  onPicked: (url: string) => void;
+  upload: (file: File) => Promise<void>;
+  isUploading: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const upload = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) {
-        toast.error("That file isn't an image.");
-        return;
-      }
-      setIsUploading(true);
-      try {
-        const body = new FormData();
-        body.append("file", await shrinkIfLarge(file), file.name || "pasted.jpg");
-        if (draftId) body.append("draftId", draftId);
-        const res = await fetch("/api/images/upload", { method: "POST", body });
-        const isJson = res.headers.get("content-type")?.includes("application/json");
-        if (!isJson) throw new Error("Your session expired. Reload the page and sign in again.");
-        const json = (await res.json()) as { url?: string; error?: string };
-        if (!res.ok || !json.url) throw new Error(json.error ?? `Upload failed (HTTP ${res.status}).`);
-        onPicked(json.url);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Upload failed");
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [draftId, onPicked]
-  );
 
   // Paste from clipboard while the dialog is open.
   useEffect(() => {
