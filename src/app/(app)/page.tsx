@@ -9,9 +9,17 @@ import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { getDraftCardContext } from "@/lib/draft-card-context";
 import { cn } from "@/lib/utils";
+import { dayKey, dayLabel } from "@/lib/schedule-time";
 import type { Draft, DraftStatus, Publication } from "@/lib/types";
 
-const VALID_STATUSES: DraftStatus[] = ["new", "ready", "published", "discarded"];
+const VALID_STATUSES: DraftStatus[] = [
+  "new",
+  "ready",
+  "scheduled",
+  "published",
+  "failed",
+  "discarded",
+];
 
 export default async function QueuePage({
   searchParams,
@@ -25,16 +33,18 @@ export default async function QueuePage({
 
   const supabase = await createClient();
 
-  let query = supabase
-    .from("drafts")
-    .select("*, publications(*)")
-    .order("created_at", { ascending: false });
+  let query = supabase.from("drafts").select("*, publications(*)");
 
-  if (status) {
-    query = query.eq("status", status);
+  if (status === "scheduled") {
+    // Soonest first. A draft being published right now still counts as scheduled.
+    query = query
+      .in("status", ["scheduled", "publishing"])
+      .order("scheduled_for", { ascending: true });
+  } else if (status) {
+    query = query.eq("status", status).order("created_at", { ascending: false });
   } else {
     // "All" still hides discarded drafts unless you ask for them.
-    query = query.neq("status", "discarded");
+    query = query.neq("status", "discarded").order("created_at", { ascending: false });
   }
 
   const [{ data, error }, { data: statusRows }] = await Promise.all([
@@ -44,7 +54,25 @@ export default async function QueuePage({
   const drafts = (data ?? []) as (Draft & { publications: Publication[] })[];
   const counts: Partial<Record<DraftStatus, number>> = {};
   for (const row of (statusRows ?? []) as { status: DraftStatus }[]) {
-    counts[row.status] = (counts[row.status] ?? 0) + 1;
+    // "publishing" is the tail end of scheduled.
+    const key = row.status === "publishing" ? "scheduled" : row.status;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+
+  // Scheduled view: one heading per New York day ("Today", "Tomorrow", then dates).
+  const now = new Date();
+  const groups: { key: string; label: string; drafts: typeof drafts }[] = [];
+  if (status === "scheduled") {
+    for (const draft of drafts) {
+      const when = new Date(draft.scheduled_for ?? draft.created_at);
+      const key = dayKey(when);
+      let group = groups.find((g) => g.key === key);
+      if (!group) {
+        group = { key, label: dayLabel(when, now), drafts: [] };
+        groups.push(group);
+      }
+      group.drafts.push(draft);
+    }
   }
   const context = await getDraftCardContext();
 
@@ -73,12 +101,36 @@ export default async function QueuePage({
       {!error && drafts.length === 0 && (
         <EmptyState
           title={status ? `No ${status} drafts` : "The queue is empty"}
-          description="New stories from the newsletters land here automatically. You can also write one yourself."
+          description={
+            status === "scheduled"
+              ? "Nothing is scheduled. Use Schedule on a draft to send it out later."
+              : "New stories from the newsletters land here automatically. You can also write one yourself."
+          }
           action={{ href: "/new", label: "New post" }}
         />
       )}
 
-      {drafts.length > 0 && (
+      {status === "scheduled" && groups.length > 0 && (
+        <div className="flex flex-col gap-8">
+          {groups.map((group) => (
+            <section key={group.key} aria-labelledby={`day-${group.key}`} className="flex flex-col gap-3">
+              <h2 id={`day-${group.key}`} className="text-sm font-semibold text-muted-foreground">
+                {group.label}
+                <span className="ml-2 font-normal tabular-nums">{group.drafts.length}</span>
+              </h2>
+              <ul className="flex flex-col gap-4" aria-label={`Scheduled ${group.label}`}>
+                {group.drafts.map((draft) => (
+                  <li key={draft.id}>
+                    <DraftCard draft={draft} publications={draft.publications} context={context} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {status !== "scheduled" && drafts.length > 0 && (
         <ul className="flex flex-col gap-4" aria-label="Drafts">
           {drafts.map((draft) => (
             <li key={draft.id}>

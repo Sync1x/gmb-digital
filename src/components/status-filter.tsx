@@ -5,8 +5,10 @@ import type { DraftStatus } from "@/lib/types";
 const FILTERS: { label: string; value: DraftStatus | "all" }[] = [
   { label: "All", value: "all" },
   { label: "New", value: "new" },
+  { label: "Scheduled", value: "scheduled" },
   { label: "Ready", value: "ready" },
   { label: "Published", value: "published" },
+  { label: "Failed", value: "failed" },
   { label: "Discarded", value: "discarded" },
 ];
 

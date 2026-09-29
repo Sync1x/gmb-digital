@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       data: { user },
     },
     { count: newCount },
+    { count: scheduledCount },
     cookieStore,
   ] = await Promise.all([
     supabase.auth.getUser(),
@@ -19,6 +20,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       .from("drafts")
       .select("id", { count: "exact", head: true })
       .eq("status", "new"),
+    supabase
+      .from("drafts")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["scheduled", "publishing"]),
     cookies(),
   ]);
 
@@ -33,7 +38,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       >
         Skip to content
       </a>
-      <AppSidebar email={user?.email ?? null} newCount={newCount ?? 0} />
+      <AppSidebar
+        email={user?.email ?? null}
+        newCount={newCount ?? 0}
+        scheduledCount={scheduledCount ?? 0}
+      />
       <SidebarInset>
         <SiteHeader isDraftMode={!isLiveEnabled()} />
         <div

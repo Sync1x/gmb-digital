@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronsUpDownIcon,
   HistoryIcon,
@@ -23,6 +24,9 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -56,12 +60,49 @@ function initials(email: string) {
   return letters.toUpperCase();
 }
 
+/** "Scheduled" under Queue, with its own count (separate from the new-drafts badge). */
+function ScheduledNavItem({ count }: { count: number }) {
+  const pathname = usePathname();
+  const status = useSearchParams().get("status");
+  const { isMobile, setOpenMobile } = useSidebar();
+  const active = pathname === "/" && status === "scheduled";
+
+  return (
+    <SidebarMenuSub>
+      <SidebarMenuSubItem>
+        <SidebarMenuSubButton
+          isActive={active}
+          render={
+            <Link
+              href="/?status=scheduled"
+              aria-current={active ? "page" : undefined}
+              onClick={() => isMobile && setOpenMobile(false)}
+            />
+          }
+        >
+          <span>Scheduled</span>
+          {count > 0 && (
+            <span
+              className="ml-auto rounded-md bg-sidebar-accent px-1.5 text-xs font-medium tabular-nums"
+              aria-label={`${count} scheduled`}
+            >
+              {count}
+            </span>
+          )}
+        </SidebarMenuSubButton>
+      </SidebarMenuSubItem>
+    </SidebarMenuSub>
+  );
+}
+
 function NavLinks({
   links,
   newCount,
+  scheduledCount = 0,
 }: {
   links: typeof WORK_LINKS;
   newCount?: number;
+  scheduledCount?: number;
 }) {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -87,6 +128,11 @@ function NavLinks({
               <link.icon aria-hidden="true" />
               <span>{link.label}</span>
             </SidebarMenuButton>
+            {link.href === "/" && (
+              <Suspense fallback={null}>
+                <ScheduledNavItem count={scheduledCount} />
+              </Suspense>
+            )}
             {showCount && (
               <SidebarMenuBadge
                 className="bg-sidebar-primary text-sidebar-primary-foreground peer-hover/menu-button:text-sidebar-primary-foreground peer-data-active/menu-button:text-sidebar-primary-foreground"
@@ -102,7 +148,15 @@ function NavLinks({
   );
 }
 
-export function AppSidebar({ email, newCount }: { email: string | null; newCount: number }) {
+export function AppSidebar({
+  email,
+  newCount,
+  scheduledCount,
+}: {
+  email: string | null;
+  newCount: number;
+  scheduledCount: number;
+}) {
   const { isMobile } = useSidebar();
 
   return (
@@ -134,7 +188,7 @@ export function AppSidebar({ email, newCount }: { email: string | null; newCount
         <SidebarGroup>
           <SidebarGroupLabel>Publishing</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavLinks links={WORK_LINKS} newCount={newCount} />
+            <NavLinks links={WORK_LINKS} newCount={newCount} scheduledCount={scheduledCount} />
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
