@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -7,7 +8,6 @@ import {
   HistoryIcon,
   InboxIcon,
   LogOutIcon,
-  RadioTowerIcon,
   SettingsIcon,
   SquarePenIcon,
 } from "lucide-react";
@@ -111,9 +111,14 @@ export function AppSidebar({ email, newCount }: { email: string | null; newCount
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />} tooltip="GMB Digital">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <RadioTowerIcon className="size-4" aria-hidden="true" />
-              </div>
+              <Image
+                src="/gmb-logo.png"
+                alt=""
+                width={278}
+                height={276}
+                priority
+                className="size-8 shrink-0 rounded-full"
+              />
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate font-semibold">GMB Digital</span>
                 <span className="truncate text-xs text-muted-foreground">

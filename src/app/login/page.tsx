@@ -1,7 +1,7 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState } from "react";
-import { RadioTowerIcon } from "lucide-react";
 import { login } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,14 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted/50 px-4 py-10">
       <div className="flex items-center gap-2.5 font-semibold">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <RadioTowerIcon className="size-4" aria-hidden="true" />
-        </div>
+        <Image
+          src="/gmb-logo.png"
+          alt=""
+          width={278}
+          height={276}
+          priority
+          className="size-10 rounded-full"
+        />
         GMB Digital
       </div>
       <Card className="w-full max-w-sm">
