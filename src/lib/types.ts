@@ -1,5 +1,12 @@
 export type SourceType = "newsletter" | "manual";
-export type DraftStatus = "new" | "ready" | "published" | "discarded";
+export type DraftStatus =
+  | "new"
+  | "ready"
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "failed"
+  | "discarded";
 
 export type Draft = {
   id: string;
@@ -15,6 +22,24 @@ export type Draft = {
   categories: string[];
   status: DraftStatus;
   featured_image_url: string | null;
+  /** UTC. Only meaningful while status is "scheduled" (or "publishing"). */
+  scheduled_for: string | null;
+  /** Failed scheduled-publish attempts; after 3 the draft becomes "failed". */
+  publish_attempts: number;
+  last_publish_error: string | null;
+  publishing_started_at: string | null;
+  edited_after_scheduling: boolean;
+};
+
+export type SchedulerRun = {
+  id: number;
+  ran_at: string;
+  source: "cron" | "manual";
+  publish_mode: PublishTarget;
+  claimed: number;
+  published: number;
+  failed: number;
+  late: number;
 };
 
 export type PublicationStatus = "pending" | "published" | "failed";

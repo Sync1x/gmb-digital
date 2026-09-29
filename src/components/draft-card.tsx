@@ -39,14 +39,20 @@ import { PublicationStatus } from "@/components/publication-status";
 const STATUS_LABEL: Record<DraftStatus, string> = {
   new: "New",
   ready: "Ready",
+  scheduled: "Scheduled",
+  publishing: "Publishing",
   published: "Published",
+  failed: "Failed",
   discarded: "Discarded",
 };
 
 const STATUS_VARIANT: Record<DraftStatus, "default" | "secondary" | "outline" | "destructive"> = {
   new: "secondary",
   ready: "default",
+  scheduled: "default",
+  publishing: "secondary",
   published: "outline",
+  failed: "destructive",
   discarded: "destructive",
 };
 
