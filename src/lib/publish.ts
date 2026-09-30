@@ -142,6 +142,7 @@ export async function publishDraftToStation(
         content: textToHtml(draft.body),
         status: target === "live" ? ("publish" as const) : ("draft" as const),
         categories,
+        allowComments: draft.allow_comments === true,
       };
 
       if (existingPostId) {

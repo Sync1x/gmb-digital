@@ -26,6 +26,8 @@ export type CreatePostInput = {
    * the wrong category when another one owns its sanitized slug.
    */
   categories?: string[];
+  /** Comments and pingbacks on the post. Closed unless this is true. */
+  allowComments?: boolean;
   /** Public URL of the featured image; the child site downloads it. */
   featuredImageUrl?: string;
 };
@@ -167,6 +169,12 @@ export async function listSites(): Promise<MainwpSite[]> {
     .filter((s) => s.id);
 }
 
+/** WordPress comment_status / ping_status: closed unless comments are wanted. */
+function commentFields(allow: boolean | undefined) {
+  const state = allow ? "open" : "closed";
+  return { comment_status: state, ping_status: state };
+}
+
 function slugify(title: string): string {
   return (
     title
@@ -189,6 +197,7 @@ export async function createPost(input: CreatePostInput): Promise<CreatedPost> {
     post_content: input.content,
     post_status: input.status,
     post_name: slugify(input.title),
+    ...commentFields(input.allowComments),
   };
   if (input.categories?.length) {
     payload.post_category = input.categories.join(",");
@@ -228,6 +237,7 @@ export type EditPostInput = {
   status: WpPostStatus;
   /** Category slugs (see CreatePostInput). */
   categories?: string[];
+  allowComments?: boolean;
 };
 
 /**
@@ -241,6 +251,7 @@ export async function editPost(input: EditPostInput): Promise<void> {
     post_title: input.title,
     post_content: input.content,
     post_status: input.status,
+    ...commentFields(input.allowComments),
   };
   if (input.categories?.length) {
     payload.post_category = input.categories.join(",");

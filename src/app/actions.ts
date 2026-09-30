@@ -11,6 +11,7 @@ type DraftUpdate = {
   body?: string;
   stations?: string[];
   categories?: string[];
+  allow_comments?: boolean;
   /** Only manual states: scheduling goes through schedule-actions.ts. */
   status?: "new" | "ready" | "discarded";
 };
@@ -87,6 +88,8 @@ export async function saveManualDraft(input: {
   sender: string;
   stations: string[];
   categories: string[];
+  /** Sent only once the toggle was touched, so saves work before migration 0008. */
+  allowComments?: boolean;
   featuredImageUrl: string | null;
   status: "new" | "ready";
 }): Promise<ActionResult<string>> {
@@ -99,6 +102,7 @@ export async function saveManualDraft(input: {
       body: input.body,
       stations: input.stations.filter((s) => VALID_SLUGS.has(s)),
       categories: cleanCategories(input.categories),
+      ...(input.allowComments === undefined ? {} : { allow_comments: input.allowComments }),
       featured_image_url: input.featuredImageUrl,
       status: input.status,
       source_type: "manual" as const,

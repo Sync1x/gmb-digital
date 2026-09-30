@@ -20,6 +20,8 @@ export type Draft = {
   stations: string[];
   /** WordPress category names; each station gets the ones its site has. */
   categories: string[];
+  /** WordPress comments on the published post. Off unless turned on. */
+  allow_comments?: boolean;
   status: DraftStatus;
   featured_image_url: string | null;
   /** UTC. Only meaningful while status is "scheduled" (or "publishing"). */

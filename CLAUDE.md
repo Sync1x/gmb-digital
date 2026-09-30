@@ -35,6 +35,7 @@ Phases 1–3 are built, plus WordPress categories, an Approve & publish flow and
   - `0004` pins `set_updated_at()`'s search_path (Supabase security advisor)
   - `0005` adds `drafts.categories` (WordPress category names)
   - `0006` scheduled publishing: `drafts.scheduled_for` / `publish_attempts` / `last_publish_error` / `publishing_started_at` / `edited_after_scheduling`, the `scheduled`, `publishing` and `failed` statuses, the `scheduler_runs` log, and the `claim_due_drafts()`, `recover_stuck_drafts()`, `record_scheduler_run()` functions (service role only)
+  - `0008` adds `drafts.allow_comments` (default false)
   - `0007` enables pg_cron + pg_net and schedules the every-5-minutes job; the URL and secret come from Supabase Vault (`app_url`, `cron_secret`), never from SQL
 - Publishing runs from the browser: one `publishStationAction(draftId, slug, target)` per station in sequence, then `finalizeDraftAction(draftId, target)`. `target` is `"draft"` (Save as WordPress draft: draft status becomes `ready`) or `"live"` (Approve & publish: becomes `published` once every station is live and Facebook has fired).
 - One WP post per station per draft: an existing WordPress draft is updated in place with MainWP's `edit` call (which also publishes it; `update-status` fails on drafts). An already-live post is left alone and only Facebook is retried. The featured image is only set at creation; `edit` can't change it.
@@ -45,6 +46,7 @@ Phases 1–3 are built, plus WordPress categories, an Approve & publish flow and
   - A failed run bumps `publish_attempts`, stores `last_publish_error` and reschedules 5 minutes later; the 3rd failure sets `failed`. `publishing` for over 15 minutes counts as a failed attempt and goes back to `scheduled`. Drafts claimed more than 15 minutes after their time are still published and counted as `late`.
   - The Supabase job (0007) is the scheduler. `docs/vercel-cron.json` is the Vercel Pro alternative (not active: Hobby rejects sub-daily crons and would fail the deploy). `/settings` has the Scheduler card (health, recent runs, Run now); failed scheduled posts show as red alerts at the top of the queue.
   - While a draft is `publishing` it is read-only (the card and `updateDraft` refuse edits). Editing a `scheduled` draft keeps it scheduled and sets `edited_after_scheduling`.
+- Comments are off on every post: `publish.ts` sends `comment_status` and `ping_status` (`closed` unless the draft's `allow_comments` toggle is on) on both MainWP create and edit. The toggle is only written when changed, so the app still saves before migration 0008 is run.
 - `PUBLISH_MODE` is the master switch. It defaults to `draft`, which disables the live buttons (WP drafts only, no Facebook). Only `PUBLISH_MODE=live` allows Approve & publish.
 
 ## Build phases (do them in order, don't jump ahead)

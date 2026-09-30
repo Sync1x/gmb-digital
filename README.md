@@ -15,6 +15,8 @@ The publishing dashboard for Green Mountain Broadcasters. It replaces the "20 br
 6. **History** lists everything published, with links to each station's post and whether Facebook was triggered.
 7. **Settings** shows whether MainWP is connected, every site MainWP manages (with its ID), and which stations are set up.
 
+**Comments are off** on every post the app publishes. Each card and New post has an **Allow comments** switch (off by default) if a story ever needs them. The **WordPress library** button next to Upload image picks from images already on a station's site.
+
 Optional: **Suggest title** asks an AI (DeepSeek) for three plain, factual headlines. It's off unless you turn it on.
 
 ### The live-publishing switch
@@ -51,6 +53,7 @@ Keep `draft` on your own computer and whenever you're testing or changing someth
    - `0005_draft_categories.sql`
    - `0006_scheduled_publishing.sql`
    - `0007_scheduler_cron.sql` (only after adding the two Vault secrets, see "Scheduled publishing")
+   - `0008_allow_comments.sql`
 3. **Authentication → Users → Add user**: create an email and password for each person who will use the app.
 4. **Project Settings → API**: copy the Project URL, the `anon` key and the `service_role` key.
 

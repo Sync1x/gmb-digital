@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ImagePicker } from "@/components/image-picker";
 import { StationPicker } from "@/components/station-picker";
 import { CategoryPicker } from "@/components/category-picker";
+import { CommentsToggle } from "@/components/comments-toggle";
 import { SuggestTitleButton } from "@/components/suggest-title-button";
 import { PublishDialog } from "@/components/publish-dialog";
 import { ScheduleDialog } from "@/components/schedule-dialog";
@@ -31,6 +32,8 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  // undefined until touched: untouched drafts keep the default (closed) without writing the column.
+  const [allowComments, setAllowComments] = useState<boolean | undefined>(undefined);
   const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [isSaving, startSave] = useTransition();
@@ -50,6 +53,7 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
       sender,
       stations: selectedStations,
       categories,
+      allowComments,
       featuredImageUrl: imageUrl,
       status,
     });
@@ -157,6 +161,12 @@ export function ComposerForm({ context }: { context: DraftCardContext }) {
             categoriesByStation={context.categoriesByStation}
             value={categories}
             onChange={setCategories}
+          />
+
+          <CommentsToggle
+            id="composer-comments"
+            checked={allowComments === true}
+            onChange={setAllowComments}
           />
         </div>
       </CardContent>

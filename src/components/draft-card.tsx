@@ -41,6 +41,7 @@ import {
 import { ImagePicker } from "@/components/image-picker";
 import { StationPicker } from "@/components/station-picker";
 import { CategoryPicker } from "@/components/category-picker";
+import { CommentsToggle } from "@/components/comments-toggle";
 import { SuggestTitleButton } from "@/components/suggest-title-button";
 import { PublishDialog } from "@/components/publish-dialog";
 import { ScheduleDialog } from "@/components/schedule-dialog";
@@ -92,6 +93,7 @@ export function DraftCard({
   const [body, setBody] = useState(draft.body);
   const [selectedStations, setSelectedStations] = useState<string[]>(draft.stations);
   const [categories, setCategories] = useState<string[]>(draft.categories ?? []);
+  const [allowComments, setAllowComments] = useState(draft.allow_comments === true);
   const [imageUrl, setImageUrl] = useState<string | null>(draft.featured_image_url);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const [publishTarget, setPublishTarget] = useState<PublishTarget | null>(null);
@@ -116,7 +118,14 @@ export function DraftCard({
   });
 
   function edits() {
-    return { title: title.trim() || null, body, stations: selectedStations, categories };
+    return {
+      title: title.trim() || null,
+      body,
+      stations: selectedStations,
+      categories,
+      // Only sent when changed, so saving works before migration 0008 is run.
+      ...(allowComments !== (draft.allow_comments === true) ? { allow_comments: allowComments } : {}),
+    };
   }
 
   function run(label: string, fn: () => Promise<{ ok: boolean; error?: string }>, success: string) {
@@ -250,6 +259,13 @@ export function DraftCard({
             categoriesByStation={context.categoriesByStation}
             value={categories}
             onChange={setCategories}
+            disabled={locked}
+          />
+
+          <CommentsToggle
+            id={`${draft.id}-comments`}
+            checked={allowComments}
+            onChange={setAllowComments}
             disabled={locked}
           />
         </div>
